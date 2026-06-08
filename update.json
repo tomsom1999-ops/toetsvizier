@@ -2,7 +2,7 @@
   "latest_version": "0.1.0",
   "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.1.0",
   "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.1.0/ToetsVizier-0.1.0-windows-installer.exe",
-  "installer_sha256": "91BD77E30A1585298F064FF81904942D6C2D0F3BF450998C187B5782BCAF2D23",
+  "installer_sha256": "D5050D9AA3070AB69667989697FFAC458876739DD26F3ADE705705B6CCA41BD0",
   "release_notes": "Eerste updatekanaal voor ToetsVizier.",
   "versions": [
     {
