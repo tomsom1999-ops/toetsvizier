@@ -1,19 +1,20 @@
 {
-  "latest_version": "0.1.0",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.1.0",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.1.0/ToetsVizier-0.1.0-windows-installer.exe",
-  "installer_sha256": "D5050D9AA3070AB69667989697FFAC458876739DD26F3ADE705705B6CCA41BD0",
-  "release_notes": "Eerste updatekanaal voor ToetsVizier.",
+  "latest_version": "0.1.1",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.1.1",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.1.1/ToetsVizier-0.1.1-windows-installer.exe",
+  "release_notes": "Verbeterde installerrelease met werkende update-download, correct bureaubladicoon en nette uitlijning in Toetsen.",
   "versions": [
     {
-      "version": "0.1.0",
+      "version": "0.1.1",
       "type": "kleine update/patch",
-      "title": "Eerste updatekanaal",
+      "title": "Installerfixes en UI-uitlijning",
       "changes": [
-        "Updatecontrole toegevoegd.",
-        "Versienummer zichtbaar gemaakt in de app.",
-        "Release-notes per versie voorbereid."
+        "De Windows-installer opnieuw opgebouwd en vervangen zodat de download niet meer als corrupt wordt gezien.",
+        "De updatefeed verwijst nu naar de juiste installer en controlehash voor automatische updates.",
+        "In Toetsen staan 'Toets beheren' en de actieknoppen nu op gelijke hoogte.",
+        "De installer embedt nu het ToetsVizier-icoon ook correct in het bureaubladpictogram."
       ]
     }
-  ]
+  ],
+  "installer_sha256": "16EA324207CB2923D7276EC707635D0B6DA2CA3CE1B23788D21B27E6CFA395BB"
 }
