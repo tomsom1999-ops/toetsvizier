@@ -1,0 +1,17 @@
+{
+  "latest_version": "0.1.0",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases",
+  "release_notes": "Eerste updatekanaal voor ToetsVizier.",
+  "versions": [
+    {
+      "version": "0.1.0",
+      "type": "kleine update/patch",
+      "title": "Eerste updatekanaal",
+      "changes": [
+        "Updatecontrole toegevoegd.",
+        "Versienummer zichtbaar gemaakt in de app.",
+        "Release-notes per versie voorbereid."
+      ]
+    }
+  ]
+}
