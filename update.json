@@ -1,20 +1,19 @@
 {
-  "latest_version": "0.1.1",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.1.1",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.1.1/ToetsVizier-0.1.1-windows-installer.exe",
-  "release_notes": "Verbeterde installerrelease met werkende update-download, correct bureaubladicoon en nette uitlijning in Toetsen.",
+  "latest_version": "0.1.2",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.1.2",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.1.2/ToetsVizier-0.1.2-windows-installer.exe",
+  "release_notes": "Betrouwbaardere update-installatie: na afsluiten start de installer nu echt automatisch.",
   "versions": [
     {
-      "version": "0.1.1",
+      "version": "0.1.2",
       "type": "kleine update/patch",
-      "title": "Installerfixes en UI-uitlijning",
+      "title": "Zelfupdate start installer correct",
       "changes": [
-        "De Windows-installer opnieuw opgebouwd en vervangen zodat de download niet meer als corrupt wordt gezien.",
-        "De updatefeed verwijst nu naar de juiste installer en controlehash voor automatische updates.",
-        "In Toetsen staan 'Toets beheren' en de actieknoppen nu op gelijke hoogte.",
-        "De installer embedt nu het ToetsVizier-icoon ook correct in het bureaubladpictogram."
+        "Na het downloaden schrijft ToetsVizier nu een zelfstandige launcher die blijft wachten tot de app echt is afgesloten.",
+        "Daarna start de Windows-installer automatisch, ook als de oude PowerShell-route zou falen.",
+        "De zelfupdateflow voor .exe- en .msi-installers is hiermee robuuster geworden."
       ]
     }
   ],
-  "installer_sha256": "16EA324207CB2923D7276EC707635D0B6DA2CA3CE1B23788D21B27E6CFA395BB"
+  "installer_sha256": "D91243088F23B69BC6733D7A7D749AEAEBDA22AD97C8960C6FBFDE5BFDCF0FC9"
 }
