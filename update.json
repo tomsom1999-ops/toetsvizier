@@ -1,19 +1,19 @@
 {
-  "latest_version": "0.1.3",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.1.3",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.1.3/ToetsVizier-0.1.3-windows-installer.exe",
-  "release_notes": "Polish-update voor icoon, uitlijning en rapportage zonder lege herkansingssectie.",
+  "latest_version": "0.1.4",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.1.4",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.1.4/ToetsVizier-0.1.4-windows-installer.exe",
+  "release_notes": "Update-installatie start nu direct de installer vanuit de app.",
   "versions": [
     {
-      "version": "0.1.3",
+      "version": "0.1.4",
       "type": "kleine update/patch",
-      "title": "UI-polish en nettere rapportage",
+      "title": "Directe installerstart bij updates",
       "changes": [
-        "De bureaubladsnelkoppeling gebruikt nu expliciet het juiste ToetsVizier-icoon.",
-        "In Resultateninvoer zijn de knop 'Groot invoerscherm' en de samenvattingsbalk beter uitgelijnd en blijft de statusdropdown leesbaar bij niet-gemaakte statussen.",
-        "In ontwikkelrapportages blijft de sectie over herkansingen weg wanneer er geen herkansingen in de selectie zijn."
+        "De app start de gedownloade installer nu direct, in plaats van via een losse cmd-launcher.",
+        "Daardoor verdwijnt het extra cmd-venster uit de updateflow.",
+        "De installer kan ToetsVizier daarna zelf afsluiten en de update uitvoeren."
       ]
     }
   ],
-  "installer_sha256": "C348E785D52A25FDC227BAE0DE7C2A6636956E52DC43531771E4A6E31C4AB262"
+  "installer_sha256": "563FDDF1C5249A399303B2B36950C17D8DF7CE9812728DFFF5F33A88F866DDC4"
 }
