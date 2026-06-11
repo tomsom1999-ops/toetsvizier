@@ -1,19 +1,19 @@
 {
-  "latest_version": "0.1.4",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.1.4",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.1.4/ToetsVizier-0.1.4-windows-installer.exe",
-  "release_notes": "Update-installatie start nu direct de installer vanuit de app.",
+  "latest_version": "0.1.5",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.1.5",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.1.5/ToetsVizier-0.1.5-windows-installer.exe",
+  "release_notes": "Dashboardzoom, compactere menubalk en veiliger update-instellingen.",
   "versions": [
     {
-      "version": "0.1.4",
+      "version": "0.1.5",
       "type": "kleine update/patch",
-      "title": "Directe installerstart bij updates",
+      "title": "Dashboardzoom en compactere bediening",
       "changes": [
-        "De app start de gedownloade installer nu direct, in plaats van via een losse cmd-launcher.",
-        "Daardoor verdwijnt het extra cmd-venster uit de updateflow.",
-        "De installer kan ToetsVizier daarna zelf afsluiten en de update uitvoeren."
+        "Interactieve dashboards hebben nu een compacte zoomfunctie met plus, min en reset.",
+        "De bovenste vakbalk is compacter gemaakt zodat menu's meer werkruimte overhouden.",
+        "De updatebron is standaard vergrendeld en kan alleen bewust handmatig worden aangepast."
       ]
     }
   ],
-  "installer_sha256": "563FDDF1C5249A399303B2B36950C17D8DF7CE9812728DFFF5F33A88F866DDC4"
+  "installer_sha256": "90F1E161D52AC0FCE06960CF4957DDE584229B1F7118924833EC795BD6F54E2B"
 }
