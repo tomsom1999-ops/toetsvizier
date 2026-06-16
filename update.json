@@ -1,19 +1,19 @@
 {
-  "latest_version": "0.1.5",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.1.5",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.1.5/ToetsVizier-0.1.5-windows-installer.exe",
-  "release_notes": "Dashboardzoom, compactere menubalk en veiliger update-instellingen.",
+  "latest_version": "0.1.6",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.1.6",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.1.6/ToetsVizier-0.1.6-windows-installer.exe",
+  "release_notes": "Verduidelijkte analyse-export voor sectierapportages.",
   "versions": [
     {
-      "version": "0.1.5",
+      "version": "0.1.6",
       "type": "kleine update/patch",
-      "title": "Dashboardzoom en compactere bediening",
+      "title": "Duidelijkere analyse-export",
       "changes": [
-        "Interactieve dashboards hebben nu een compacte zoomfunctie met plus, min en reset.",
-        "De bovenste vakbalk is compacter gemaakt zodat menu's meer werkruimte overhouden.",
-        "De updatebron is standaard vergrendeld en kan alleen bewust handmatig worden aangepast."
+        "De exportknop in Toetsanalyse heet nu 'Algemene analyse exporteren'.",
+        "De wizard maakt duidelijk dat het om een grafisch PDF-sectierapport gaat.",
+        "De PDF bevat selecteerbare onderdelen zoals toetskwaliteit, itemanalyse, meerkeuzeanalyse en onderdelenanalyse."
       ]
     }
   ],
-  "installer_sha256": "90F1E161D52AC0FCE06960CF4957DDE584229B1F7118924833EC795BD6F54E2B"
+  "installer_sha256": "FBDBF632CED73AD563BBF98271600565542C0F3D01AD75CE5ED737B6061A96A0"
 }
