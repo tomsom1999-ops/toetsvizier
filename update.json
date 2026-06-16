@@ -1,19 +1,27 @@
 {
-  "latest_version": "0.1.6",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.1.6",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.1.6/ToetsVizier-0.1.6-windows-installer.exe",
-  "release_notes": "Verduidelijkte analyse-export voor sectierapportages.",
+  "latest_version": "0.2.0",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.2.0",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.2.0/ToetsVizier-0.2.0-windows-installer.exe",
+  "release_notes": "Grote verbetering van analyse, rapportage en scoreverwerking.",
   "versions": [
     {
-      "version": "0.1.6",
-      "type": "kleine update/patch",
-      "title": "Duidelijkere analyse-export",
+      "version": "0.2.0",
+      "type": "middelgrote update",
+      "title": "Analyse- en rapportageverbeteringen",
       "changes": [
-        "De exportknop in Toetsanalyse heet nu 'Algemene analyse exporteren'.",
-        "De wizard maakt duidelijk dat het om een grafisch PDF-sectierapport gaat.",
-        "De PDF bevat selecteerbare onderdelen zoals toetskwaliteit, itemanalyse, meerkeuzeanalyse en onderdelenanalyse."
+        "Nieuwe knop 'Algemene analyse exporteren' in Toetsanalyse.",
+        "Nieuwe aanvinkwizard voor een grafische PDF-sectierapportage voor vaksecties.",
+        "Sectierapport met samenvatting, toetskwaliteit, Cronbach's alpha, P-waarde, Rit, Rir en SEM.",
+        "Itemanalyse-export met status, onderbouwing en ondersteuning voor hoofdvragen/subvragen.",
+        "Meerkeuzeanalyse uitgebreid met antwoordsleutel, goedgekeurde alternatieven, N-scores en antwoordverdeling.",
+        "N-scores bij meerkeuzevragen worden als 0 meegeteld in de totaalscore, maar niet als gekozen alternatief in de antwoordanalyse.",
+        "Analyseweergave verbeterd voor gedeelde posities/rangschikking bij gelijke scores.",
+        "Alfabetische sortering van leerlingen verbeterd met Nederlandse tussenvoegsels.",
+        "Analyse per taxonomie, classificatie en onderdeel kan worden opgenomen met compacte grafische overzichten.",
+        "Optioneel deelnemersoverzicht toegevoegd voor intern sectiegebruik.",
+        "Extra tests toegevoegd voor analyse-export, N-scores, gedeelde posities en naamsortering."
       ]
     }
   ],
-  "installer_sha256": "FBDBF632CED73AD563BBF98271600565542C0F3D01AD75CE5ED737B6061A96A0"
+  "installer_sha256": "32FD90B014180238CC5A17C5166F4EB705CC069CA7C5D829FA83AB696D68A959"
 }
