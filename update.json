@@ -1,27 +1,21 @@
 {
-  "latest_version": "0.2.0",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.2.0",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.2.0/ToetsVizier-0.2.0-windows-installer.exe",
-  "release_notes": "Grote verbetering van analyse, rapportage en scoreverwerking.",
+  "latest_version": "0.2.1",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.2.1",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.2.1/ToetsVizier-0.2.1-windows-installer.exe",
+  "release_notes": "Patchupdate voor duidelijkere vraaginvoer en subvragen.",
   "versions": [
     {
-      "version": "0.2.0",
-      "type": "middelgrote update",
-      "title": "Analyse- en rapportageverbeteringen",
+      "version": "0.2.1",
+      "type": "patch",
+      "title": "Vraaginvoer duidelijker gemaakt",
       "changes": [
-        "Nieuwe knop 'Algemene analyse exporteren' in Toetsanalyse.",
-        "Nieuwe aanvinkwizard voor een grafische PDF-sectierapportage voor vaksecties.",
-        "Sectierapport met samenvatting, toetskwaliteit, Cronbach's alpha, P-waarde, Rit, Rir en SEM.",
-        "Itemanalyse-export met status, onderbouwing en ondersteuning voor hoofdvragen/subvragen.",
-        "Meerkeuzeanalyse uitgebreid met antwoordsleutel, goedgekeurde alternatieven, N-scores en antwoordverdeling.",
-        "N-scores bij meerkeuzevragen worden als 0 meegeteld in de totaalscore, maar niet als gekozen alternatief in de antwoordanalyse.",
-        "Analyseweergave verbeterd voor gedeelde posities/rangschikking bij gelijke scores.",
-        "Alfabetische sortering van leerlingen verbeterd met Nederlandse tussenvoegsels.",
-        "Analyse per taxonomie, classificatie en onderdeel kan worden opgenomen met compacte grafische overzichten.",
-        "Optioneel deelnemersoverzicht toegevoegd voor intern sectiegebruik.",
-        "Extra tests toegevoegd voor analyse-export, N-scores, gedeelde posities en naamsortering."
+        "Vraaginvoer gebruikt nu duidelijke kaarten in plaats van een tabelachtige invoer.",
+        "Subvragen worden per subvraag als losse kaart getoond met punten, tijd, omschrijving, taxonomie\u00ebn, classificaties en meerkeuzegegevens.",
+        "Ook bij toevoegen aan de vraagdatabase wordt metadata per subvraag kaartachtig ingevoerd.",
+        "Velden schalen beter mee en voorkomen afgekapte kolommen bij veel classificaties.",
+        "Bestaande opslag, analyses en databasekoppelingen blijven ongewijzigd."
       ]
     }
   ],
-  "installer_sha256": "32FD90B014180238CC5A17C5166F4EB705CC069CA7C5D829FA83AB696D68A959"
+  "installer_sha256": "F2B5CB4CCF87EE86AB93553CB32CEF374AE5B23D793FEB540878B637D25E8DCE"
 }
