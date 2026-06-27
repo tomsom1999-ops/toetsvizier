@@ -1,21 +1,21 @@
 {
-  "latest_version": "0.2.1",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.2.1",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.2.1/ToetsVizier-0.2.1-windows-installer.exe",
-  "release_notes": "Patchupdate voor duidelijkere vraaginvoer en subvragen.",
+  "latest_version": "0.2.2",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.2.2",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.2.2/ToetsVizier-0.2.2-windows-installer.exe",
+  "release_notes": "Update 0.2.2 voegt een uitgebreide deeltoets-opknipping toe, met duidelijkere hulpteksten en een betere scheiding tussen totaaltoets- en deeltoetsanalyse.",
   "versions": [
     {
-      "version": "0.2.1",
+      "version": "0.2.2",
       "type": "patch",
-      "title": "Vraaginvoer duidelijker gemaakt",
+      "title": "Deeltoets-opknipping en hulp uitgebreid",
       "changes": [
-        "Vraaginvoer gebruikt nu duidelijke kaarten in plaats van een tabelachtige invoer.",
-        "Subvragen worden per subvraag als losse kaart getoond met punten, tijd, omschrijving, taxonomie\u00ebn, classificaties en meerkeuzegegevens.",
-        "Ook bij toevoegen aan de vraagdatabase wordt metadata per subvraag kaartachtig ingevoerd.",
-        "Velden schalen beter mee en voorkomen afgekapte kolommen bij veel classificaties.",
-        "Bestaande opslag, analyses en databasekoppelingen blijven ongewijzigd."
+        "Toetsen kunnen nu optioneel voor analyse worden opgesplitst in deeltoetsen, zodat u een toets met bijvoorbeeld twee stofdelen of twee onderwerpblokken apart kunt beoordelen.",
+        "Elke deeltoets krijgt een eigen naam en een eigen set vragen of subvragen. U ziet in het vragenoverzicht daarna duidelijk welke vraag bij welke deeltoets hoort.",
+        "De analyse laat deeltoetsen en totaaltoets los van elkaar zien: classificaties, vragen en groeps- en leerlinganalyse worden per gekozen scope getoond, terwijl cijferinformatie bij de totaaltoets blijft.",
+        "De helpwizard en hulpschermen leggen nu expliciet uit wanneer de opknipping zichtbaar is, hoe u die beheert en wat het verschil is tussen totaaltoets en deeltoets.",
+        "Bestaande toetsen, resultaten en databases blijven behouden; de nieuwe functie is optioneel en pas zichtbaar wanneer u deze via geavanceerde instellingen aanzet."
       ]
     }
   ],
-  "installer_sha256": "F2B5CB4CCF87EE86AB93553CB32CEF374AE5B23D793FEB540878B637D25E8DCE"
+  "installer_sha256": "3507004620B435630AFD752F490F28CB850B2F126D2925089BE374BD40DEBB65"
 }
