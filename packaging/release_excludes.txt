@@ -1,0 +1,9 @@
+data/*.db
+backups/*.db
+exports/**
+logs/**
+config/**
+__pycache__/**
+*.pyc
+.codex_tmp/**
+.codex_pdf_review/**
