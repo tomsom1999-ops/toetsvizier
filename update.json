@@ -1,21 +1,22 @@
 {
-  "latest_version": "0.2.2",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.2.2",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.2.2/ToetsVizier-0.2.2-windows-installer.exe",
-  "release_notes": "Update 0.2.2 voegt een uitgebreide deeltoets-opknipping toe, met duidelijkere hulpteksten en een betere scheiding tussen totaaltoets- en deeltoetsanalyse.",
+  "latest_version": "0.3.0",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.3.0",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.3.0/ToetsVizier-0.3.0-windows-installer.exe",
+  "release_notes": "Update 0.3.0 verbetert de resultateninvoer en uitzonderingsflows: losse leerlingen kunnen aan een toets worden gekoppeld, leerlingen kunnen buiten analyses worden gehouden en verticale invoer werkt nu sneller en duidelijker.",
   "versions": [
     {
-      "version": "0.2.2",
-      "type": "patch",
-      "title": "Deeltoets-opknipping en hulp uitgebreid",
+      "version": "0.3.0",
+      "type": "minor",
+      "title": "Resultateninvoer en uitzonderingen verbeterd",
       "changes": [
-        "Toetsen kunnen nu optioneel voor analyse worden opgesplitst in deeltoetsen, zodat u een toets met bijvoorbeeld twee stofdelen of twee onderwerpblokken apart kunt beoordelen.",
-        "Elke deeltoets krijgt een eigen naam en een eigen set vragen of subvragen. U ziet in het vragenoverzicht daarna duidelijk welke vraag bij welke deeltoets hoort.",
-        "De analyse laat deeltoetsen en totaaltoets los van elkaar zien: classificaties, vragen en groeps- en leerlinganalyse worden per gekozen scope getoond, terwijl cijferinformatie bij de totaaltoets blijft.",
-        "De helpwizard en hulpschermen leggen nu expliciet uit wanneer de opknipping zichtbaar is, hoe u die beheert en wat het verschil is tussen totaaltoets en deeltoets.",
-        "Bestaande toetsen, resultaten en databases blijven behouden; de nieuwe functie is optioneel en pas zichtbaar wanneer u deze via geavanceerde instellingen aanzet."
+        "Bij een toets kunnen nu extra losse leerlingen worden gekoppeld, ook wanneer zij niet in een van de gekoppelde groepen zitten.",
+        "De nieuwe leerlingstatus 'niet analyseren' bewaart ingevoerde scores, maar sluit de leerling uit van analyses en open-invoercontroles.",
+        "N-scores werken soepeler: kleine n en hoofdletter N worden herkend, als N opgeslagen en tellen als 0 punten.",
+        "Meerkeuzevragen tonen in de invoertabel direct de goede antwoordsleutel in de kolomkop.",
+        "Verticale invoer ondersteunt omhoog en omlaag werken. Aan het einde van een kolom gaat de invoer automatisch naar de volgende vraag en keert de richting om.",
+        "De helpteksten en invoerlogica zijn aangescherpt zodat docenten sneller en veiliger scores kunnen invoeren."
       ]
     }
   ],
-  "installer_sha256": "3507004620B435630AFD752F490F28CB850B2F126D2925089BE374BD40DEBB65"
+  "installer_sha256": "0FE4AA58E20FDB283D57921BC96CE3585BB40E680022752EF071040BC686F455"
 }
