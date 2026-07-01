@@ -6,13 +6,24 @@ from .paths import APP_ROOT
 
 
 SENSITIVE_PATTERNS = (
-    "data/*.db",
-    "backups/*.db",
+    "data/**/*",
+    "backups/**/*",
     "exports/**/*",
     "logs/**/*",
     "config/**/*",
     "**/__pycache__/*.pyc",
     "*.pyc",
+    "*.db",
+    "*.sqlite",
+    "*.sqlite3",
+    "*.xlsx",
+    "*.xls",
+    "*.xlsm",
+    "*.csv",
+    "*.tsv",
+    "*.pdf",
+    "*.log",
+    "*.tmp",
 )
 
 

@@ -436,6 +436,7 @@ class ResultsPage(Page):
         self.all_students: list[dict] = []
         self.loading = False
         self.quick_entry_possible = False
+        self.active_student_row = -1
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
         scroll_area = QScrollArea()
@@ -580,6 +581,7 @@ class ResultsPage(Page):
             | QAbstractItemView.EditTrigger.AnyKeyPressed
         )
         self.table.itemChanged.connect(self.score_changed)
+        self.table.currentCellChanged.connect(self.current_score_cell_changed)
         self.table.installEventFilter(self)
         self.score_layout.addWidget(self.table)
         self.score_panel.setVisible(False)
@@ -883,6 +885,7 @@ class ResultsPage(Page):
         selected_class = self.class_filter.currentData()
         selected_status_filter = self.status_filter.currentData()
         self.loading = True
+        self.active_student_row = -1
         self.table.clear()
         self.questions = test_questions(self.database, test_id) if test_id is not None else []
         self.all_students = test_students(self.database, test_id) if test_id is not None else []
@@ -1006,6 +1009,30 @@ class ResultsPage(Page):
         self.table.verticalHeader().setFixedWidth(header_width)
         self.loading = False
         self.update_summary()
+
+    def current_score_cell_changed(
+        self,
+        current_row: int,
+        _current_column: int,
+        previous_row: int,
+        _previous_column: int,
+    ) -> None:
+        if self.loading:
+            return
+        if previous_row != current_row:
+            self.set_student_name_active(previous_row, False)
+        self.active_student_row = current_row
+        self.set_student_name_active(current_row, True)
+
+    def set_student_name_active(self, row: int, active: bool) -> None:
+        if row < 0 or row >= self.table.rowCount():
+            return
+        for name_item in (self.table.verticalHeaderItem(row), self.table.item(row, 0)):
+            if name_item is None:
+                continue
+            font = QFont(name_item.font())
+            font.setBold(active)
+            name_item.setFont(font)
 
     def eventFilter(self, watched, event) -> bool:
         if watched is self.table and event.type() == QEvent.Type.KeyPress:
@@ -1508,6 +1535,7 @@ class ResultsPage(Page):
                     total_cell.setForeground(QColor("#314766"))
                     total_cell.setBackground(QColor("#edf2f7"))
             total_cell.setFont(font)
+            self.set_student_name_active(row, row == self.active_student_row)
         finally:
             self.table.blockSignals(False)
             self.loading = was_loading

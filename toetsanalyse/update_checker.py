@@ -32,7 +32,10 @@ class UpdateInfo:
     latest_version: str
     download_url: str
     installer_url: str
+    package_url: str = ""
     installer_sha256: str = ""
+    package_sha256: str = ""
+    update_type: str = ""
     release_notes: str = ""
     version_changes: tuple[VersionChange, ...] = ()
 
@@ -111,26 +114,43 @@ def update_info_from_manifest(
         or manifest.get("url")
         or ""
     ).strip()
-    installer_url = str(
-        manifest.get("installer_url")
-        or manifest.get("download_url")
-        or manifest.get("url")
+    package_url = str(
+        manifest.get("package_url")
+        or manifest.get("update_package_url")
+        or manifest.get("patch_url")
         or ""
     ).strip()
+    installer_url = str(manifest.get("installer_url") or "").strip()
+    if not installer_url and not package_url:
+        installer_url = str(manifest.get("download_url") or manifest.get("url") or "").strip()
     installer_sha256 = str(manifest.get("installer_sha256") or manifest.get("sha256") or "").strip()
+    package_sha256 = str(
+        manifest.get("package_sha256")
+        or manifest.get("update_package_sha256")
+        or manifest.get("patch_sha256")
+        or ""
+    ).strip()
+    update_type = str(
+        manifest.get("update_type")
+        or manifest.get("update_kind")
+        or ("package" if package_url else "installer")
+    ).strip().casefold()
     release_notes = str(manifest.get("release_notes") or manifest.get("notes") or "").strip()
     if not latest_version:
         raise UpdateCheckError("Het updatebestand bevat geen nieuwste versienummer.")
-    if not installer_url:
-        raise UpdateCheckError("Het updatebestand bevat geen installerlink.")
+    if not installer_url and not package_url:
+        raise UpdateCheckError("Het updatebestand bevat geen installerlink of updatepakketlink.")
     if not download_url:
-        download_url = installer_url
+        download_url = package_url or installer_url
     return UpdateInfo(
         current_version=current_version,
         latest_version=latest_version,
         download_url=download_url,
         installer_url=installer_url,
+        package_url=package_url,
         installer_sha256=installer_sha256,
+        package_sha256=package_sha256,
+        update_type=update_type,
         release_notes=release_notes,
         version_changes=version_changes_from_manifest(manifest),
     )

@@ -19,6 +19,8 @@ class UpdateManifestTests(unittest.TestCase):
                 "release_notes": "Nieuw in {version}.",
                 "download_url_template": "https://example.test/downloads/{version}.zip",
                 "installer_url_template": "https://example.test/installers/{version}.exe",
+                "package_url_template": "https://example.test/packages/{version}.zip",
+                "update_type": "package",
                 "versions": [
                     {
                         "version": "{version}",
@@ -34,6 +36,8 @@ class UpdateManifestTests(unittest.TestCase):
         self.assertEqual("1.2.3", manifest["latest_version"])
         self.assertEqual("https://example.test/downloads/1.2.3.zip", manifest["download_url"])
         self.assertEqual("https://example.test/installers/1.2.3.exe", manifest["installer_url"])
+        self.assertEqual("https://example.test/packages/1.2.3.zip", manifest["package_url"])
+        self.assertEqual("package", manifest["update_type"])
         self.assertEqual("Nieuw in 1.2.3.", manifest["release_notes"])
         self.assertEqual("Versie 1.2.3", manifest["versions"][0]["title"])
 
@@ -50,6 +54,29 @@ class UpdateManifestTests(unittest.TestCase):
                 },
                 version="1.0.0",
             )
+
+    def test_package_update_type_uses_default_package_url(self) -> None:
+        manifest = build_update_manifest(
+            {
+                "release_notes": "Nieuwe pakketupdate.",
+                "versions": [
+                    {
+                        "version": "{version}",
+                        "changes": ["Patch."],
+                    }
+                ],
+            },
+            version="1.2.4",
+            update_type="package",
+            package_sha256="A" * 64,
+        )
+
+        self.assertEqual(
+            "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.2.4/ToetsVizier-update-1.2.4.zip",
+            manifest["package_url"],
+        )
+        self.assertEqual("package", manifest["update_type"])
+        self.assertEqual("A" * 64, manifest["package_sha256"])
 
     def test_command_can_generate_update_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

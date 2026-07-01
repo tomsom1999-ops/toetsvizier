@@ -61,6 +61,24 @@ class UpdateCheckerTests(unittest.TestCase):
 
         self.assertEqual(info.download_url, info.installer_url)
 
+    def test_manifest_accepts_update_package_without_installer(self) -> None:
+        info = update_info_from_manifest(
+            {
+                "latest_version": "1.1.0",
+                "download_url": "https://example.test/releases/1.1.0",
+                "package_url": "https://example.test/ToetsVizier-update-1.1.0.zip",
+                "package_sha256": "ABC",
+                "update_type": "package",
+            },
+            current_version="1.0.0",
+        )
+
+        self.assertTrue(info.is_newer)
+        self.assertEqual("", info.installer_url)
+        self.assertEqual("https://example.test/ToetsVizier-update-1.1.0.zip", info.package_url)
+        self.assertEqual("ABC", info.package_sha256)
+        self.assertEqual("package", info.update_type)
+
     def test_check_for_update_reads_json_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             manifest_path = Path(directory) / "update.json"

@@ -109,32 +109,63 @@ staan.
 
 ## Releases en updates publiceren
 
-Het updatesysteem controleert een publiek `update.json` op GitHub. Als daarin
-een nieuwere versie staat, downloadt ToetsVizier de installer, sluit de app af
-en start daarna de update.
+Het updatesysteem controleert een publiek `update.json` op GitHub. Er zijn twee
+routes:
+
+- **Updatepakket:** voor kleine patches en gewone appwijzigingen. Dit is een
+  ZIP-bestand met alleen appbestanden. ToetsVizier controleert de hash, maakt
+  een back-up van bestanden die worden vervangen en vraagt daarna om opnieuw
+  starten.
+- **Installer:** voor grote releases of wijzigingen aan Python, PySide6,
+  Playwright, Qt, Inno Setup of andere runtime-onderdelen.
 
 Gebruik bij een nieuwe release deze volgorde:
 
 1. Verhoog `toetsanalyse\version.py` naar de nieuwe uitgaveversie.
 2. Werk `packaging\update_manifest.source.json` bij met de releasenotities en
    wijzigingsregels voor die versie.
-3. Bouw eerst de installer:
+3. Kies de publicatieroute.
+
+Voor een kleine update:
+
+```powershell
+python packaging\build_update_package.py --version <versie> --dist-dir dist\ToetsVizier
+```
+
+Publiceer `releases\ToetsVizier-update-<versie>.zip` op GitHub Releases onder
+tag `v<versie>` en genereer daarna `update.json` met de pakketroute en hash:
+
+```powershell
+python packaging\build_update_manifest.py --version <versie> --update-type package --package-sha256 <hash>
+```
+
+Voor een grote update bouwt u een installer:
 
 ```powershell
 python packaging\build_installer.py
 ```
 
-4. Publiceer daarna de installer op GitHub Releases. De standaardnaam is
+Publiceer daarna de installer op GitHub Releases. De standaardnaam is
    `ToetsVizier-<versie>-windows-installer.exe` onder tag `v<versie>`.
-5. Genereer daarna pas het live manifest:
+Genereer daarna pas het live manifest:
 
 ```powershell
 python packaging\build_update_manifest.py
 ```
 
 Dit schrijft `update.json` in de projectroot. Publiceer dat bestand pas nadat
-de installer echt bestaat; anders zien gebruikers een update die nog niet
-kan worden geïnstalleerd.
+de installer of het updatepakket echt bestaat; anders zien gebruikers een
+update die nog niet kan worden geïnstalleerd.
+
+`build_update_package.py` sluit bewust lokale gebruikersdata uit: `data`,
+`backups`, `exports`, `logs`, `config`, databases, Excelbestanden en tijdelijke
+bestanden komen niet in het updatepakket. Bij pakketten vanuit `dist\ToetsVizier`
+blijven interne runtimebestanden wel behouden.
+
+Let op: voor een geïnstalleerde `.exe` moet het pakket vanuit de PyInstaller-map
+`dist\ToetsVizier` worden gebouwd. Dan bevat het pakket de nieuwe `ToetsVizier.exe`
+en `_internal`-bestanden. ToetsVizier zet zo'n pakket klaar en laat een kleine
+externe toepasser de bestanden vervangen nadat de app is afgesloten.
 
 U kunt ook controleren of `update.json` nog overeenkomt met het sjabloon en de
 huidige versie:

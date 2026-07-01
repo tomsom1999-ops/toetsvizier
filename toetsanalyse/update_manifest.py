@@ -15,6 +15,10 @@ DEFAULT_INSTALLER_URL_TEMPLATE = (
     "https://github.com/tomsom1999-ops/toetsvizier/releases/download/"
     "v{version}/ToetsVizier-{version}-windows-installer.exe"
 )
+DEFAULT_PACKAGE_URL_TEMPLATE = (
+    "https://github.com/tomsom1999-ops/toetsvizier/releases/download/"
+    "v{version}/ToetsVizier-update-{version}.zip"
+)
 
 
 class UpdateManifestError(ValueError):
@@ -53,7 +57,10 @@ def build_update_manifest(
     version: str = APP_VERSION,
     download_url: str | None = None,
     installer_url: str | None = None,
+    package_url: str | None = None,
     installer_sha256: str | None = None,
+    package_sha256: str | None = None,
+    update_type: str | None = None,
 ) -> dict[str, Any]:
     if not version.strip():
         raise UpdateManifestError("Geef een geldig versienummer op.")
@@ -62,6 +69,7 @@ def build_update_manifest(
         raise UpdateManifestError("Het gerenderde manifestsjabloon heeft een ongeldige structuur.")
     rendered_download_template = str(rendered.get("download_url_template") or "").strip()
     rendered_installer_template = str(rendered.get("installer_url_template") or "").strip()
+    rendered_package_template = str(rendered.get("package_url_template") or "").strip()
     resolved_download_url = (
         download_url.strip()
         if download_url is not None and download_url.strip()
@@ -86,6 +94,24 @@ def build_update_manifest(
         "release_notes": str(rendered.get("release_notes") or "").strip(),
         "versions": version_entries,
     }
+    resolved_update_type = (
+        update_type.strip().casefold()
+        if update_type is not None and update_type.strip()
+        else str(rendered.get("update_type") or "").strip().casefold()
+    )
+    resolved_package_url = (
+        package_url.strip()
+        if package_url is not None and package_url.strip()
+        else rendered_package_template
+    )
+    if resolved_update_type == "package" and not resolved_package_url:
+        resolved_package_url = DEFAULT_PACKAGE_URL_TEMPLATE
+    if resolved_package_url:
+        resolved_package_url = resolved_package_url.format(version=version.strip())
+    if resolved_package_url:
+        manifest["package_url"] = resolved_package_url
+    if resolved_update_type:
+        manifest["update_type"] = resolved_update_type
     resolved_sha256 = (
         installer_sha256.strip()
         if installer_sha256 is not None and installer_sha256.strip()
@@ -93,6 +119,13 @@ def build_update_manifest(
     )
     if resolved_sha256:
         manifest["installer_sha256"] = resolved_sha256
+    resolved_package_sha256 = (
+        package_sha256.strip()
+        if package_sha256 is not None and package_sha256.strip()
+        else str(rendered.get("package_sha256") or "").strip()
+    )
+    if resolved_package_sha256:
+        manifest["package_sha256"] = resolved_package_sha256
     update_info_from_manifest(manifest, current_version=version.strip())
     return manifest
 
@@ -137,9 +170,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Expliciete directe installerlink (.exe of .msi).",
     )
     parser.add_argument(
+        "--package-url",
+        default="",
+        help="Expliciete directe link naar een updatepakket (.zip).",
+    )
+    parser.add_argument(
         "--installer-sha256",
         default="",
         help="Optionele SHA-256-controlehash van de installer.",
+    )
+    parser.add_argument(
+        "--package-sha256",
+        default="",
+        help="Optionele SHA-256-controlehash van het updatepakket.",
+    )
+    parser.add_argument(
+        "--update-type",
+        default="",
+        choices=["", "installer", "package"],
+        help="Voorkeursroute voor deze update.",
     )
     parser.add_argument(
         "--check",
@@ -152,7 +201,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         version=str(args.version),
         download_url=str(args.download_url),
         installer_url=str(args.installer_url),
+        package_url=str(args.package_url),
         installer_sha256=str(args.installer_sha256),
+        package_sha256=str(args.package_sha256),
+        update_type=str(args.update_type),
     )
     output_path = Path(args.output)
     if args.check:

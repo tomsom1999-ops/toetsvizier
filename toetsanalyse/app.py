@@ -199,7 +199,16 @@ from .results import (
 )
 from .student_report_wizard import StudentReportWizardDialog
 from .results_page import ResultsPage
-from .self_update import SelfUpdateError, download_update_installer, launch_installer
+from .self_update import (
+    SelfUpdateError,
+    apply_update_package,
+    download_update_installer,
+    download_update_package,
+    launch_staged_update,
+    launch_installer,
+    stage_update_package_for_restart,
+    validate_update_package,
+)
 from .student_attribute_analysis import (
     GROUP_ATTRIBUTE_KEY,
     analyzable_student_attributes,
@@ -304,12 +313,20 @@ class UpdateDownloadThread(QThread):
 
     def run(self) -> None:
         try:
-            installer_path = download_update_installer(
-                self.info.installer_url,
-                version=self.info.latest_version,
-                expected_sha256=self.info.installer_sha256,
-                progress_callback=self._emit_progress,
-            )
+            if self.info.package_url and self.info.update_type != "installer":
+                installer_path = download_update_package(
+                    self.info.package_url,
+                    version=self.info.latest_version,
+                    expected_sha256=self.info.package_sha256,
+                    progress_callback=self._emit_progress,
+                )
+            else:
+                installer_path = download_update_installer(
+                    self.info.installer_url,
+                    version=self.info.latest_version,
+                    expected_sha256=self.info.installer_sha256,
+                    progress_callback=self._emit_progress,
+                )
         except SelfUpdateError as error:
             self.error_ready.emit(str(error))
         except Exception as error:
@@ -334,6 +351,7 @@ class UpdateAvailableDialog(QDialog):
         self.info = info
         self.download_thread: UpdateDownloadThread | None = None
         self.downloaded_installer: Path | None = None
+        self.downloaded_package: Path | None = None
         self.setWindowTitle("Update beschikbaar")
         self.setMinimumSize(560, 420)
         layout = QVBoxLayout(self)
@@ -353,16 +371,25 @@ class UpdateAvailableDialog(QDialog):
         notes.setOpenExternalLinks(True)
         notes.setHtml(self._release_notes_html())
         notes.setMinimumHeight(210)
-        self.status_label = QLabel(
-            "Kies 'Downloaden en installeren' om de nieuwe versie binnen te halen. "
-            "Na het downloaden sluit ToetsVizier af en start de installer."
-        )
+        if self.uses_update_package:
+            status_text = (
+                "Kies 'Updatepakket downloaden' om alleen de gewijzigde appbestanden binnen te halen. "
+                "ToetsVizier maakt eerst een back-up van de te vervangen bestanden en vraagt daarna om opnieuw starten."
+            )
+            download_text = "Updatepakket downloaden"
+        else:
+            status_text = (
+                "Kies 'Downloaden en installeren' om de nieuwe versie binnen te halen. "
+                "Na het downloaden sluit ToetsVizier af en start de installer."
+            )
+            download_text = "Downloaden en installeren"
+        self.status_label = QLabel(status_text)
         self.status_label.setWordWrap(True)
         self.progress = QProgressBar()
         self.progress.setVisible(False)
         self.progress.setTextVisible(True)
         buttons = QDialogButtonBox()
-        self.download_button = buttons.addButton("Downloaden en installeren", QDialogButtonBox.ButtonRole.AcceptRole)
+        self.download_button = buttons.addButton(download_text, QDialogButtonBox.ButtonRole.AcceptRole)
         self.release_page_button = buttons.addButton("Releasepagina openen", QDialogButtonBox.ButtonRole.ActionRole)
         self.later_button = buttons.addButton("Later", QDialogButtonBox.ButtonRole.RejectRole)
         self.download_button.clicked.connect(self.download_or_install)
@@ -375,6 +402,10 @@ class UpdateAvailableDialog(QDialog):
         layout.addWidget(self.status_label)
         layout.addWidget(self.progress)
         layout.addWidget(buttons)
+
+    @property
+    def uses_update_package(self) -> bool:
+        return bool(self.info.package_url and self.info.update_type != "installer")
 
     def _release_notes_html(self) -> str:
         blocks = [
@@ -418,6 +449,9 @@ class UpdateAvailableDialog(QDialog):
         QDesktopServices.openUrl(QUrl(self.info.download_url))
 
     def download_or_install(self) -> None:
+        if self.downloaded_package is not None:
+            self.confirm_and_apply_package()
+            return
         if self.downloaded_installer is not None:
             self.confirm_and_install()
             return
@@ -453,16 +487,26 @@ class UpdateAvailableDialog(QDialog):
             f"{received / (1024 * 1024):.1f} van {total_bytes / (1024 * 1024):.1f} MB)."
         )
 
-    def download_finished(self, installer_path: str) -> None:
-        self.downloaded_installer = Path(installer_path)
+    def download_finished(self, update_path: str) -> None:
+        downloaded_path = Path(update_path)
         self.progress.setRange(0, 1)
         self.progress.setValue(1)
-        self.status_label.setText(
-            f"De installer is klaar: {self.downloaded_installer.name}. "
-            "Sla open werk op en start daarna de installatie."
-        )
-        self.download_button.setText("Installer starten")
-        self.confirm_and_install()
+        if self.uses_update_package:
+            self.downloaded_package = downloaded_path
+            self.status_label.setText(
+                f"Het updatepakket is klaar: {downloaded_path.name}. "
+                "Sla open werk op en pas daarna de update toe."
+            )
+            self.download_button.setText("Update toepassen")
+            self.confirm_and_apply_package()
+        else:
+            self.downloaded_installer = downloaded_path
+            self.status_label.setText(
+                f"De installer is klaar: {downloaded_path.name}. "
+                "Sla open werk op en start daarna de installatie."
+            )
+            self.download_button.setText("Installer starten")
+            self.confirm_and_install()
 
     def download_failed(self, message: str) -> None:
         self.progress.setVisible(False)
@@ -496,6 +540,57 @@ class UpdateAvailableDialog(QDialog):
             QMessageBox.warning(self, "Installer starten mislukt", str(error))
             return
         self.accept()
+
+    def confirm_and_apply_package(self) -> None:
+        if self.downloaded_package is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Updatepakket toepassen",
+            "Het updatepakket is gedownload.\n\n"
+            "ToetsVizier maakt nu een back-up van de appbestanden die worden vervangen. "
+            "Uw vakdatabases, back-ups, exports en instellingen worden niet overschreven.\n\n"
+            "Na het toepassen moet u ToetsVizier opnieuw starten.\n\n"
+            "Nu doorgaan?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            package_paths = validate_update_package(self.downloaded_package)
+            needs_restart_applier = getattr(sys, "frozen", False) or any(
+                path.suffix.casefold() == ".exe" for path in package_paths
+            )
+            if needs_restart_applier:
+                script_path, backup_dir = stage_update_package_for_restart(self.downloaded_package)
+                launch_staged_update(script_path)
+                applied_now = False
+            else:
+                backup_dir = apply_update_package(self.downloaded_package)
+                applied_now = True
+        except SelfUpdateError as error:
+            QMessageBox.warning(self, "Updatepakket toepassen mislukt", str(error))
+            return
+        except Exception as error:
+            QMessageBox.warning(self, "Updatepakket toepassen mislukt", f"De update is teruggedraaid: {error}")
+            return
+        update_message = (
+            "Het updatepakket wordt toegepast zodra ToetsVizier is afgesloten.\n\n"
+            if not applied_now
+            else "Het updatepakket is toegepast.\n\n"
+        )
+        update_message += (
+            f"Er is een veiligheidsback-up gemaakt in:\n{backup_dir}\n\n"
+            "ToetsVizier wordt nu afgesloten. Start het programma daarna opnieuw."
+        )
+        QMessageBox.information(
+            self,
+            "Update voorbereid" if not applied_now else "Update toegepast",
+            update_message,
+        )
+        self.accept()
+        QApplication.quit()
 
     def reject(self) -> None:
         if self.download_thread and self.download_thread.isRunning():
@@ -3288,7 +3383,7 @@ class AdvancedSettingsPage(Page):
         update_title = QLabel("<b>Updates</b>")
         update_explanation = QLabel(
             "Hier stelt u in waar ToetsVizier mag controleren of er een nieuwe versie beschikbaar is. "
-            "Bij een nieuwe versie downloadt ToetsVizier eerst de installer en sluit daarna af om de update te starten."
+            "Kleine updates kunnen via een licht updatepakket worden toegepast; bij grote technische updates gebruikt ToetsVizier de installer."
         )
         update_explanation.setWordWrap(True)
         self.version_label = QLabel(

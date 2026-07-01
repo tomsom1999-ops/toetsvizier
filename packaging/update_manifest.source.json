@@ -1,18 +1,23 @@
 {
-  "release_notes": "Update 0.3.0 verbetert de resultateninvoer en uitzonderingsflows: losse leerlingen kunnen aan een toets worden gekoppeld, leerlingen kunnen buiten analyses worden gehouden en verticale invoer werkt nu sneller en duidelijker.",
+  "release_notes": "Update 0.3.1 verbetert de resultateninvoer, uitzonderingsflows en automatische updatefunctie. Deze patch maakt updatepakketten veiliger, houdt leerlingdata buiten releases en zorgt dat ToetsVizier betrouwbaarder kan worden bijgewerkt.",
   "download_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v{version}",
   "installer_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-{version}-windows-installer.exe",
+  "package_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-update-{version}.zip",
+  "update_type": "package",
   "versions": [
     {
       "version": "{version}",
-      "type": "minor",
-      "title": "Resultateninvoer en uitzonderingen verbeterd",
+      "type": "patch",
+      "title": "Updatefunctie en resultateninvoer aangescherpt",
       "changes": [
         "Bij een toets kunnen nu extra losse leerlingen worden gekoppeld, ook wanneer zij niet in een van de gekoppelde groepen zitten.",
         "De nieuwe leerlingstatus 'niet analyseren' bewaart ingevoerde scores, maar sluit de leerling uit van analyses en open-invoercontroles.",
         "N-scores werken soepeler: kleine n en hoofdletter N worden herkend, als N opgeslagen en tellen als 0 punten.",
         "Meerkeuzevragen tonen in de invoertabel direct de goede antwoordsleutel in de kolomkop.",
         "Verticale invoer ondersteunt omhoog en omlaag werken. Aan het einde van een kolom gaat de invoer automatisch naar de volgende vraag en keert de richting om.",
+        "Updatepakketten wachten nu betrouwbaarder tot de app is afgesloten voordat bestanden worden vervangen.",
+        "Bij een mislukte update worden back-ups teruggezet en nieuw geplaatste bestanden opgeruimd.",
+        "Interne runtimebestanden in updatepakketten blijven behouden, terwijl lokale leerlingdata en exports worden uitgesloten.",
         "De helpteksten en invoerlogica zijn aangescherpt zodat docenten sneller en veiliger scores kunnen invoeren."
       ]
     }
