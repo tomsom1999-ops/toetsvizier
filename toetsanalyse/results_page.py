@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QTimer, Qt
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QScrollArea,
     QSizePolicy,
+    QStyledItemDelegate,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -68,6 +69,114 @@ from .ui_helpers import (
     set_button_role,
     slug,
 )
+
+
+class ActiveStudentHeader(QHeaderView):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(Qt.Orientation.Vertical, parent)
+        self.active_row = -1
+
+    def set_active_row(self, row: int) -> None:
+        if self.active_row == row:
+            return
+        self.active_row = row
+        self.viewport().update()
+
+    def paintSection(self, painter: QPainter, rect, logicalIndex: int) -> None:  # noqa: N802
+        if not rect.isValid():
+            return
+        model = self.model()
+        text = ""
+        if model is not None:
+            text = str(
+                model.headerData(
+                    logicalIndex,
+                    self.orientation(),
+                    Qt.ItemDataRole.DisplayRole,
+                )
+                or ""
+            )
+        active = logicalIndex == self.active_row
+        painter.save()
+        painter.fillRect(rect, QColor("#dbeafe") if active else QColor("#eaf0fb"))
+        painter.setPen(QColor("#cbd6e6"))
+        painter.drawLine(rect.bottomLeft(), rect.bottomRight())
+        if active:
+            painter.fillRect(rect.left(), rect.top(), 4, rect.height(), QColor("#2563eb"))
+        font = QFont(self.font())
+        font.setBold(active)
+        if active:
+            font.setWeight(QFont.Weight.Bold)
+        painter.setFont(font)
+        painter.setPen(QColor("#071f42") if active else QColor("#1f3352"))
+        painter.drawText(
+            rect.adjusted(12, 0, -8, 0),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            text,
+        )
+        painter.restore()
+
+
+class ActiveQuestionHeader(QHeaderView):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(Qt.Orientation.Horizontal, parent)
+        self.active_column = -1
+
+    def set_active_column(self, column: int) -> None:
+        if self.active_column == column:
+            return
+        self.active_column = column
+        self.viewport().update()
+
+    def paintSection(self, painter: QPainter, rect, logicalIndex: int) -> None:  # noqa: N802
+        if not rect.isValid():
+            return
+        model = self.model()
+        text = ""
+        if model is not None:
+            text = str(
+                model.headerData(
+                    logicalIndex,
+                    self.orientation(),
+                    Qt.ItemDataRole.DisplayRole,
+                )
+                or ""
+            )
+        active = logicalIndex == self.active_column
+        painter.save()
+        painter.fillRect(rect, QColor("#dbeafe") if active else QColor("#eaf0fb"))
+        painter.setPen(QColor("#cbd6e6"))
+        painter.drawLine(rect.bottomLeft(), rect.bottomRight())
+        painter.drawLine(rect.topRight(), rect.bottomRight())
+        if active:
+            painter.fillRect(rect.left(), rect.top(), rect.width(), 4, QColor("#2563eb"))
+        font = QFont(self.font())
+        font.setWeight(QFont.Weight.Bold if active else QFont.Weight.DemiBold)
+        painter.setFont(font)
+        painter.setPen(QColor("#071f42") if active else QColor("#1f3352"))
+        painter.drawText(
+            rect.adjusted(4, 6, -4, -4),
+            Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
+            text,
+        )
+        painter.restore()
+
+
+class ActiveScoreCellDelegate(QStyledItemDelegate):
+    def __init__(self, page: "ResultsPage", parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.page = page
+
+    def paint(self, painter: QPainter, option, index) -> None:  # noqa: ANN001
+        super().paint(painter, option, index)
+        first = self.page.SCORE_START_COLUMN
+        last = first + len(self.page.questions) - 1
+        if index.row() != self.page.table.currentRow() or not (first <= index.column() <= last):
+            return
+        painter.save()
+        painter.setPen(QPen(QColor("#2563eb"), 2))
+        painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
+        painter.restore()
 
 
 class ResultsImportDialog(QDialog):
@@ -557,6 +666,11 @@ class ResultsPage(Page):
         score_header.setContentsMargins(0, 0, 0, 0)
         score_header.setSpacing(8)
         score_header.addWidget(self.summary, 1, Qt.AlignmentFlag.AlignVCenter)
+        self.save_state = QLabel("Opgeslagen")
+        self.save_state.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.save_state.setFixedHeight(30)
+        self.save_state.setMinimumWidth(112)
+        self.set_save_state("saved")
         self.large_input_button = compact_action_button(
             set_button_role(QPushButton("Groot invoerscherm"), "secondary"),
             "Open dezelfde scoretabel in een groot venster voor kleine schermen of brede toetsen.",
@@ -566,10 +680,29 @@ class ResultsPage(Page):
         header_row_height = self.large_input_button.height()
         self.summary.setMinimumHeight(header_row_height)
         self.summary.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        score_header.addWidget(self.save_state, 0, Qt.AlignmentFlag.AlignVCenter)
         score_header.addWidget(self.large_input_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.score_layout.addLayout(score_header)
         self.summary.setVisible(False)
+        self.input_guide = QLabel(
+            "Sneltoetsen: N = vraag niet gemaakt | Delete/Backspace = score wissen | "
+            "cijfers/letters = invoeren | Enter/pijltjes = navigeren. "
+            "Kleuren: blauwe totaalscore = rij compleet | oranje N = vraag niet gemaakt | "
+            "groen/rood = meerkeuze goed/fout."
+        )
+        self.input_guide.setWordWrap(True)
+        self.input_guide.setStyleSheet(
+            "background:#f8fbff; border:1px solid #d7e3f3; border-radius:10px; "
+            "padding:8px 10px; color:#314766;"
+        )
+        self.input_guide.setVisible(False)
+        self.score_layout.addWidget(self.input_guide)
         self.table = QTableWidget()
+        self.student_header = ActiveStudentHeader(self.table)
+        self.question_header = ActiveQuestionHeader(self.table)
+        self.table.setVerticalHeader(self.student_header)
+        self.table.setHorizontalHeader(self.question_header)
+        self.table.setItemDelegate(ActiveScoreCellDelegate(self, self.table))
         self.table.setVisible(False)
         self.table.setMinimumHeight(360)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -654,7 +787,7 @@ class ResultsPage(Page):
                 },
                 {
                     "title": "Controleren of u klaar bent",
-                    "text": "Een volledig ingevulde rij krijgt een groene totaalscore. De samenvatting boven de tabel meldt hoeveel invoervelden nog ontbreken.",
+                    "text": "Een volledig ingevulde rij krijgt een blauwe totaalscore. De samenvatting boven de tabel meldt hoeveel invoervelden nog ontbreken.",
                     "action": "Controleer aan het eind alle statussen en of elke gemaakte toets een complete rij heeft.",
                     "tip": "Pas na complete resultaten is normering en toetsanalyse betrouwbaar.",
                 },
@@ -756,8 +889,26 @@ class ResultsPage(Page):
             self.score_panel.setVisible(has_test)
         if hasattr(self, "summary"):
             self.summary.setVisible(has_test)
+        if hasattr(self, "input_guide"):
+            self.input_guide.setVisible(has_test)
         if hasattr(self, "table"):
             self.table.setVisible(has_test)
+
+    def set_save_state(self, state: str) -> None:
+        if not hasattr(self, "save_state"):
+            return
+        styles = {
+            "saving": ("Opslaan...", "#fff7e6", "#f0c36d", "#8a5a00"),
+            "error": ("Niet opgeslagen", "#fdecec", "#f2a4a4", "#a02828"),
+            "saved": ("Opgeslagen", "#eef7ff", "#c9dcf5", "#1d4ed8"),
+            "idle": ("Opgeslagen", "#eef7ff", "#c9dcf5", "#1d4ed8"),
+        }
+        text, background, border, color = styles.get(state, styles["saved"])
+        self.save_state.setText(text)
+        self.save_state.setStyleSheet(
+            f"background:{background}; border:1px solid {border}; border-radius:10px; "
+            f"color:{color}; font-weight:700; padding:4px 10px;"
+        )
 
     def update_vertical_direction_visibility(self, _index: int | None = None) -> None:
         visible = self.direction.currentData() == "vertical"
@@ -886,6 +1037,10 @@ class ResultsPage(Page):
         selected_status_filter = self.status_filter.currentData()
         self.loading = True
         self.active_student_row = -1
+        if hasattr(self, "student_header"):
+            self.student_header.set_active_row(-1)
+        if hasattr(self, "question_header"):
+            self.question_header.set_active_column(-1)
         self.table.clear()
         self.questions = test_questions(self.database, test_id) if test_id is not None else []
         self.all_students = test_students(self.database, test_id) if test_id is not None else []
@@ -930,6 +1085,10 @@ class ResultsPage(Page):
         headers.append("Totaal")
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
+        for offset, question in enumerate(self.questions):
+            header_item = self.table.horizontalHeaderItem(self.SCORE_START_COLUMN + offset)
+            if header_item is not None:
+                header_item.setToolTip(self.question_tooltip(question))
         self.table.verticalHeader().setVisible(True)
         self.table.verticalHeader().setDefaultAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
@@ -980,7 +1139,13 @@ class ResultsPage(Page):
             for offset, question in enumerate(self.questions):
                 column = self.SCORE_START_COLUMN + offset
                 stored = scores.get((student["id"], question["id"]))
-                text = responses.get((student["id"], question["id"]), "") if bool(question.get("is_multiple_choice")) else ("" if stored is None else f"{stored:g}")
+                response = responses.get((student["id"], question["id"]), "")
+                if is_not_made_score(response):
+                    text = "N"
+                elif bool(question.get("is_multiple_choice")):
+                    text = response
+                else:
+                    text = "" if stored is None else f"{stored:g}"
                 score_cell = QTableWidgetItem(text)
                 score_cell.setData(Qt.ItemDataRole.UserRole, text)
                 score_cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1009,6 +1174,32 @@ class ResultsPage(Page):
         self.table.verticalHeader().setFixedWidth(header_width)
         self.loading = False
         self.update_summary()
+        self.set_save_state("saved")
+
+    @staticmethod
+    def question_tooltip(question: dict) -> str:
+        lines = [
+            f"Vraag {question.get('label', '')}",
+            f"Maximumscore: {float(question.get('maximum_score') or 0):g}",
+        ]
+        description = str(question.get("short_description") or "").strip()
+        if description:
+            lines.append(f"Omschrijving: {description}")
+        expected_time = question.get("expected_time_minutes")
+        if expected_time is not None:
+            lines.append(f"Tijdindicatie: {float(expected_time):g} min.")
+        if bool(question.get("is_multiple_choice")):
+            answer_key = str(question.get("multiple_choice_answer") or "").strip().upper() or "ontbreekt"
+            lines.append(f"Meerkeuzeantwoord: {answer_key}")
+            if bool(question.get("multiple_choice_correction_enabled")):
+                mode = str(question.get("multiple_choice_correction_mode") or "none")
+                if mode == "neutralize":
+                    lines.append("Correctie: vraag geneutraliseerd")
+                elif mode == "extra":
+                    extra = str(question.get("multiple_choice_extra_answers") or "").strip()
+                    lines.append(f"Correctie: extra goed: {extra or '-'}")
+        lines.append("Tip: typ N als deze vraag niet is gemaakt.")
+        return "\n".join(lines)
 
     def current_score_cell_changed(
         self,
@@ -1023,16 +1214,31 @@ class ResultsPage(Page):
             self.set_student_name_active(previous_row, False)
         self.active_student_row = current_row
         self.set_student_name_active(current_row, True)
+        self.set_question_column_active(_current_column)
+        self.table.viewport().update()
 
     def set_student_name_active(self, row: int, active: bool) -> None:
         if row < 0 or row >= self.table.rowCount():
             return
+        if hasattr(self, "student_header"):
+            if active:
+                self.student_header.set_active_row(row)
+            elif self.student_header.active_row == row:
+                self.student_header.set_active_row(-1)
         for name_item in (self.table.verticalHeaderItem(row), self.table.item(row, 0)):
             if name_item is None:
                 continue
             font = QFont(name_item.font())
             font.setBold(active)
             name_item.setFont(font)
+        self.table.verticalHeader().viewport().update()
+
+    def set_question_column_active(self, column: int) -> None:
+        first = self.SCORE_START_COLUMN
+        last = first + len(self.questions) - 1
+        active_column = column if first <= column <= last else -1
+        if hasattr(self, "question_header"):
+            self.question_header.set_active_column(active_column)
 
     def eventFilter(self, watched, event) -> bool:
         if watched is self.table and event.type() == QEvent.Type.KeyPress:
@@ -1076,6 +1282,7 @@ class ResultsPage(Page):
         question = self.questions[offset]
         previous = str(cell.data(Qt.ItemDataRole.UserRole) or "")
         try:
+            self.set_save_state("saving")
             total = save_score(
                 self.database,
                 self.test.currentData(),
@@ -1088,6 +1295,7 @@ class ResultsPage(Page):
             self.loading = True
             cell.setText(previous)
             self.loading = False
+            self.set_save_state("error")
             QMessageBox.warning(self, "Score niet opgeslagen", str(error))
             self.table.setCurrentCell(cell.row(), cell.column())
             return
@@ -1113,6 +1321,7 @@ class ResultsPage(Page):
         self.loading = False
         self.apply_row_style(cell.row())
         self.update_summary()
+        self.set_save_state("saved")
         if normalized and self.should_quick_advance():
             self.advance_after_entry(cell.row(), cell.column())
 
@@ -1242,8 +1451,10 @@ class ResultsPage(Page):
                 "Deze leerling blijft bewaard met de ingevoerde scores, maar wordt niet meegenomen in analyses of open invoer.",
             )
         try:
+            self.set_save_state("saving")
             save_status(self.database, self.test.currentData(), student_id, status)
         except ResultValidationError as error:
+            self.set_save_state("error")
             QMessageBox.warning(self, "Status niet opgeslagen", str(error))
             self.restore_status_widget(widget, previous_status)
             return
@@ -1253,6 +1464,7 @@ class ResultsPage(Page):
             self.refresh_row_data_from_database(row, student_id)
             self.apply_row_style(row)
         self.update_summary()
+        self.set_save_state("saved")
 
     def advance_after_entry(self, row: int, column: int) -> None:
         first = self.SCORE_START_COLUMN
@@ -1357,15 +1569,19 @@ class ResultsPage(Page):
         if any(bool(question.get("is_multiple_choice")) for question in self.questions):
             self.summary.setText(
                 self.summary.text()
-                + " | Meerkeuze: voer een antwoordletter in; N = vraag niet gemaakt, telt 0 punten."
+                + " | Meerkeuze: voer een antwoordletter in."
             )
+        self.summary.setText(self.summary.text() + " | N = vraag niet gemaakt, telt 0 punten.")
 
     def refresh_row_data_from_database(self, row: int, student_id: int) -> None:
         attempts, scores, responses = stored_results(self.database, self.test.currentData())
         for offset, question in enumerate(self.questions):
             column = self.SCORE_START_COLUMN + offset
-            if bool(question.get("is_multiple_choice")):
-                text = responses.get((student_id, question["id"]), "")
+            response = responses.get((student_id, question["id"]), "")
+            if is_not_made_score(response):
+                text = "N"
+            elif bool(question.get("is_multiple_choice")):
+                text = response
             else:
                 value = scores.get((student_id, question["id"]))
                 text = "" if value is None else f"{value:g}"
@@ -1456,10 +1672,13 @@ class ResultsPage(Page):
                 question = self.questions[offset] if 0 <= offset < len(self.questions) else None
                 if is_made:
                     cell.setFlags(cell.flags() | Qt.ItemFlag.ItemIsEditable)
-                    if question and bool(question.get("is_multiple_choice")) and cell.text().strip():
+                    raw_text = cell.text().strip()
+                    if is_not_made_score(raw_text):
+                        cell.setBackground(QColor("#fff8ed"))
+                        cell.setForeground(QColor("#9a6a1d"))
+                    elif question and bool(question.get("is_multiple_choice")) and raw_text:
                         try:
-                            raw_response = cell.text().strip()
-                            response = "N" if is_not_made_score(raw_response) else normalize_multiple_choice_response(raw_response)
+                            response = normalize_multiple_choice_response(raw_text)
                             key = normalize_multiple_choice_response(str(question.get("multiple_choice_answer") or ""))
                             correction_enabled = bool(question.get("multiple_choice_correction_enabled"))
                             correction_mode = str(question.get("multiple_choice_correction_mode") or "none")
@@ -1475,20 +1694,17 @@ class ResultsPage(Page):
                             correction_mode = "none"
                             extra = set()
                         is_correct = False
-                        if response == "N":
-                            cell.setBackground(QColor("#fff7e6"))
-                            cell.setForeground(QColor("#8a5a00"))
-                        elif response and key:
+                        if response and key:
                             if correction_enabled and correction_mode == "neutralize":
                                 is_correct = True
                             elif correction_enabled and correction_mode == "extra":
                                 is_correct = response == key or response in extra
                             else:
                                 is_correct = response == key
-                        if response != "N" and is_correct:
+                        if is_correct:
                             cell.setBackground(QColor("#e8f7e8"))
                             cell.setForeground(QColor("#1f7a1f"))
-                        elif response != "N":
+                        else:
                             cell.setBackground(QColor("#fdecec"))
                             cell.setForeground(QColor("#a02828"))
                     else:
@@ -1523,8 +1739,8 @@ class ResultsPage(Page):
             font = QFont(total_cell.font())
             complete = is_made and len(self.questions) > 0 and all(value != "" for value in score_values[: len(self.questions)])
             if complete:
-                total_cell.setForeground(QColor("#1f7a1f"))
-                total_cell.setBackground(QColor("#eaf9ea"))
+                total_cell.setForeground(QColor("#1d4ed8"))
+                total_cell.setBackground(QColor("#dbeafe"))
                 font.setBold(True)
             else:
                 font.setBold(False)

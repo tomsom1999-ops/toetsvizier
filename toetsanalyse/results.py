@@ -133,6 +133,7 @@ def test_questions(database: SubjectDatabase, test_id: int) -> list[dict]:
         dict(row)
         for row in database.rows(
             "SELECT id, question_number || COALESCE(subquestion, '') AS label, maximum_score, "
+            "short_description, expected_time_minutes, "
             "is_multiple_choice, multiple_choice_answer, multiple_choice_correction_enabled, "
             "multiple_choice_correction_mode, multiple_choice_extra_answers "
             f"FROM matrix_questions WHERE test_id=? ORDER BY {QUESTION_ORDER_SQL}",
