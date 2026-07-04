@@ -538,14 +538,23 @@ class MatrixPage(Page):
         show_analysis_parts = bool(analysis_parts)
         configure_table(
             self.table,
-            ["Label", "Vraaggroep", "Bron", "Maximumscore", "Omschrijving voor deze toets", "Tijd (min.)"]
+            [
+                "Label",
+                "Vraaggroep",
+                "Bron",
+                "Antwoordsleutel",
+                "Maximumscore",
+                "Omschrijving voor deze toets",
+                "Tijd (min.)",
+            ]
             + (["Deeltoets"] if show_analysis_parts else [])
             + [taxonomy["name"] for taxonomy in taxonomies]
             + [definition["name"] for definition in properties],
         )
         rows = self.database.rows(
             "SELECT id, question_number, subquestion, question_number || COALESCE(subquestion, '') AS label, "
-            "maximum_score, short_description, expected_time_minutes, question_bank_id FROM matrix_questions WHERE test_id=? "
+            "maximum_score, short_description, expected_time_minutes, is_multiple_choice, multiple_choice_answer, "
+            "question_bank_id FROM matrix_questions WHERE test_id=? "
             "ORDER BY CAST(question_number AS INTEGER), question_number, COALESCE(subquestion, '')",
             (test_id,),
         ) if test_id else []
@@ -575,20 +584,24 @@ class MatrixPage(Page):
                 seen_groups.add(group_key)
             else:
                 label_text = f"Vraag {row['question_number']}"
+            answer_key = "-"
+            if row["is_multiple_choice"]:
+                answer_key = str(row["multiple_choice_answer"] or "").strip().upper() or "Ontbreekt"
             values = (
                 label_text,
                 group_text,
                 "Vraagdatabase" if row["question_bank_id"] else "Los",
+                answer_key,
                 row["maximum_score"],
                 row["short_description"],
                 row["expected_time_minutes"],
             )
             for column, value in enumerate(values):
                 self.table.setItem(row_number, column, item(value))
-            metadata_start_column = 6
+            metadata_start_column = 7
             if show_analysis_parts:
-                self.table.setItem(row_number, 6, item(part_names_by_question.get(int(row["id"]), "")))
-                metadata_start_column = 7
+                self.table.setItem(row_number, 7, item(part_names_by_question.get(int(row["id"]), "")))
+                metadata_start_column = 8
             self.table.resizeRowToContents(row_number)
             self.table.item(row_number, 0).setData(Qt.ItemDataRole.UserRole, row["id"])
             if row["subquestion"]:

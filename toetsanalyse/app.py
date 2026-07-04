@@ -338,6 +338,35 @@ class UpdateDownloadThread(QThread):
         self.progress_ready.emit(received, total)
 
 
+class UpdateApplyThread(QThread):
+    result_ready = Signal(str, bool)
+    error_ready = Signal(str)
+
+    def __init__(self, package_path: Path, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self.package_path = Path(package_path)
+
+    def run(self) -> None:
+        try:
+            package_paths = validate_update_package(self.package_path)
+            needs_restart_applier = getattr(sys, "frozen", False) or any(
+                path.suffix.casefold() == ".exe" for path in package_paths
+            )
+            if needs_restart_applier:
+                script_path, backup_dir = stage_update_package_for_restart(self.package_path)
+                launch_staged_update(script_path)
+                applied_now = False
+            else:
+                backup_dir = apply_update_package(self.package_path)
+                applied_now = True
+        except SelfUpdateError as error:
+            self.error_ready.emit(str(error))
+        except Exception as error:
+            self.error_ready.emit(f"De update is teruggedraaid: {error}")
+        else:
+            self.result_ready.emit(str(backup_dir), applied_now)
+
+
 def update_manifest_url_from_settings(settings: QSettings) -> str:
     if not settings_bool(settings, UPDATE_MANIFEST_EDIT_UNLOCK_KEY, False):
         return DEFAULT_UPDATE_MANIFEST_URL
@@ -350,6 +379,7 @@ class UpdateAvailableDialog(QDialog):
         super().__init__(parent)
         self.info = info
         self.download_thread: UpdateDownloadThread | None = None
+        self.apply_thread: UpdateApplyThread | None = None
         self.downloaded_installer: Path | None = None
         self.downloaded_package: Path | None = None
         self.setWindowTitle("Update beschikbaar")
@@ -498,7 +528,6 @@ class UpdateAvailableDialog(QDialog):
                 "Sla open werk op en pas daarna de update toe."
             )
             self.download_button.setText("Update toepassen")
-            self.confirm_and_apply_package()
         else:
             self.downloaded_installer = downloaded_path
             self.status_label.setText(
@@ -506,7 +535,6 @@ class UpdateAvailableDialog(QDialog):
                 "Sla open werk op en start daarna de installatie."
             )
             self.download_button.setText("Installer starten")
-            self.confirm_and_install()
 
     def download_failed(self, message: str) -> None:
         self.progress.setVisible(False)
@@ -557,24 +585,26 @@ class UpdateAvailableDialog(QDialog):
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
-        try:
-            package_paths = validate_update_package(self.downloaded_package)
-            needs_restart_applier = getattr(sys, "frozen", False) or any(
-                path.suffix.casefold() == ".exe" for path in package_paths
-            )
-            if needs_restart_applier:
-                script_path, backup_dir = stage_update_package_for_restart(self.downloaded_package)
-                launch_staged_update(script_path)
-                applied_now = False
-            else:
-                backup_dir = apply_update_package(self.downloaded_package)
-                applied_now = True
-        except SelfUpdateError as error:
-            QMessageBox.warning(self, "Updatepakket toepassen mislukt", str(error))
-            return
-        except Exception as error:
-            QMessageBox.warning(self, "Updatepakket toepassen mislukt", f"De update is teruggedraaid: {error}")
-            return
+        self.progress.setVisible(True)
+        self.progress.setRange(0, 0)
+        self.status_label.setText(
+            "Het updatepakket wordt gecontroleerd en klaargezet. "
+            "Dit kan even duren; sluit ToetsVizier nog niet af."
+        )
+        self.download_button.setEnabled(False)
+        self.release_page_button.setEnabled(False)
+        self.later_button.setEnabled(False)
+        thread = UpdateApplyThread(self.downloaded_package, self)
+        self.apply_thread = thread
+        thread.result_ready.connect(self.apply_finished)
+        thread.error_ready.connect(self.apply_failed)
+        thread.finished.connect(self.finish_apply)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
+
+    def apply_finished(self, backup_dir: str, applied_now: bool) -> None:
+        self.progress.setRange(0, 1)
+        self.progress.setValue(1)
         update_message = (
             "Het updatepakket wordt toegepast zodra ToetsVizier is afgesloten.\n\n"
             if not applied_now
@@ -592,12 +622,32 @@ class UpdateAvailableDialog(QDialog):
         self.accept()
         QApplication.quit()
 
+    def apply_failed(self, message: str) -> None:
+        self.progress.setVisible(False)
+        self.status_label.setText(message)
+        QMessageBox.warning(self, "Updatepakket toepassen mislukt", message)
+
+    def finish_apply(self) -> None:
+        self.apply_thread = None
+        if not self.isVisible():
+            return
+        self.download_button.setEnabled(True)
+        self.release_page_button.setEnabled(True)
+        self.later_button.setEnabled(True)
+
     def reject(self) -> None:
         if self.download_thread and self.download_thread.isRunning():
             QMessageBox.information(
                 self,
                 "Download actief",
                 "Wacht tot het downloaden klaar is voordat u dit venster sluit.",
+            )
+            return
+        if self.apply_thread and self.apply_thread.isRunning():
+            QMessageBox.information(
+                self,
+                "Update actief",
+                "Wacht tot het updatepakket klaar is gezet voordat u dit venster sluit.",
             )
             return
         super().reject()
@@ -2187,6 +2237,12 @@ class TestsPage(Page):
             125,
         )
         delete.clicked.connect(self.delete_test)
+        to_questions = compact_action_button(
+            set_button_role(QPushButton("Naar vragenoverzicht"), "secondary"),
+            "Open het vragenoverzicht voor de geselecteerde toets.",
+            175,
+        )
+        to_questions.clicked.connect(lambda: self.open_selected_test_page("Vragenoverzicht"))
         to_results = compact_action_button(
             set_button_role(QPushButton("Naar resultateninvoer"), "secondary"),
             "Open resultateninvoer voor de geselecteerde toets.",
@@ -2211,6 +2267,40 @@ class TestsPage(Page):
                 "Maak toetsen aan, koppel groepen en kies welke taxonomieën en vraagclassificaties u gebruikt.",
             )
         )
+        self.search_filter = QLineEdit()
+        self.search_filter.setPlaceholderText("Zoek op naam, periode, soort, niveau of jaarlaag...")
+        self.search_filter.textChanged.connect(self.refresh)
+        self.period_filter = QComboBox()
+        self.period_filter.currentIndexChanged.connect(self.refresh)
+        self.type_filter = QComboBox()
+        self.type_filter.currentIndexChanged.connect(self.refresh)
+        self.level_filter = QComboBox()
+        self.level_filter.currentIndexChanged.connect(self.refresh)
+        self.grade_filter = QComboBox()
+        self.grade_filter.currentIndexChanged.connect(self.refresh)
+        self.resit_filter = QComboBox()
+        self.resit_filter.currentIndexChanged.connect(self.refresh)
+        clear_filters = compact_action_button(
+            set_button_role(QPushButton("Filters wissen"), "secondary"),
+            "Zet alle toetsfilters terug.",
+            135,
+        )
+        clear_filters.clicked.connect(self.clear_filters)
+        self.filter_card = make_responsive_filter_card(
+            "Toetsen filteren",
+            [
+                ("Zoeken", self.search_filter),
+                ("Periode", self.period_filter),
+                ("Toetssoort", self.type_filter),
+                ("Niveau", self.level_filter),
+                ("Jaarlaag", self.grade_filter),
+                ("Type", self.resit_filter),
+                ("", clear_filters),
+            ],
+            minimum_field_width=190,
+            maximum_columns=4,
+        )
+        layout.addWidget(self.filter_card)
         action_panel = QFrame()
         action_panel.setObjectName("filterCard")
         action_layout = QGridLayout(action_panel)
@@ -2218,7 +2308,7 @@ class TestsPage(Page):
         action_layout.setHorizontalSpacing(10)
         action_layout.setVerticalSpacing(10)
         action_layout.setColumnMinimumWidth(0, 300)
-        action_layout.setColumnStretch(4, 1)
+        action_layout.setColumnStretch(5, 1)
         row_height = add.height()
         manage_label = QLabel("<b>Toets beheren</b>")
         manage_label.setFixedSize(300, row_height)
@@ -2234,13 +2324,14 @@ class TestsPage(Page):
         action_layout.addWidget(edit, 0, 2, row_alignment)
         action_layout.addWidget(delete, 0, 3, row_alignment)
         action_layout.addWidget(continue_label, 1, 0, row_alignment)
-        action_layout.addWidget(to_results, 1, 1, row_alignment)
-        action_layout.addWidget(to_norming, 1, 2, row_alignment)
-        action_layout.addWidget(to_analysis, 1, 3, row_alignment)
+        action_layout.addWidget(to_questions, 1, 1, row_alignment)
+        action_layout.addWidget(to_results, 1, 2, row_alignment)
+        action_layout.addWidget(to_norming, 1, 3, row_alignment)
+        action_layout.addWidget(to_analysis, 1, 4, row_alignment)
         layout.addWidget(action_panel)
         self.empty_state = make_empty_state(
-            "Nog geen toetsen in dit schooljaar",
-            "Maak eerst een toets. Daarna kunt u het vragenoverzicht, resultateninvoer en analyses gebruiken.",
+            "Geen toetsen zichtbaar",
+            "Maak eerst een toets of pas de filters aan. Daarna kunt u het vragenoverzicht, resultateninvoer en analyses gebruiken.",
         )
         layout.addWidget(self.empty_state)
         self.table = QTableWidget()
@@ -2262,6 +2353,12 @@ class TestsPage(Page):
                     "text": "Geef de toets een duidelijke naam, periode en toetssoort. Niveau en jaarlaag helpen om toetsen later snel terug te vinden.",
                     "action": "Klik op 'Nieuwe toets' en vul eerst de algemene velden in.",
                     "tip": "De periode bevat ook Toetsweek 1, 2 en 3.",
+                },
+                {
+                    "title": "Toetsen terugvinden met filters",
+                    "text": "Bovenaan kunt u zoeken of filteren op periode, toetssoort, niveau, jaarlaag en gewone toets/herkansing.",
+                    "action": "Gebruik de filters wanneer de toetslijst lang wordt. Met 'Filters wissen' ziet u weer alles.",
+                    "tip": "De zoekbalk zoekt tegelijk in naam, periode, toetssoort, niveau en jaarlaag.",
                 },
                 {
                     "title": "Groepen koppelen",
@@ -2289,8 +2386,8 @@ class TestsPage(Page):
                 },
                 {
                     "title": "Direct doorgaan met een toets",
-                    "text": "Na het selecteren van een toets kunt u direct naar resultateninvoer, normering of toetsanalyse.",
-                    "action": "Selecteer een toets en klik op 'Naar resultateninvoer', 'Naar normeren' of 'Naar analyse'.",
+                    "text": "Na het selecteren van een toets kunt u direct naar vragenoverzicht, resultateninvoer, normering of toetsanalyse.",
+                    "action": "Selecteer een toets en klik op 'Naar vragenoverzicht', 'Naar resultateninvoer', 'Naar normeren' of 'Naar analyse'.",
                     "tip": "Het doelmenu opent meteen met dezelfde toets geselecteerd.",
                 },
             ],
@@ -2301,7 +2398,11 @@ class TestsPage(Page):
                 },
                 {
                     "question": "Wat is het verschil tussen de drie vervolgknoppen?",
-                    "answer": "Naar resultateninvoer opent score-invoer, Naar normeren opent cijferomzetting en Naar analyse opent de toetsanalyse voor dezelfde toets.",
+                    "answer": "Naar vragenoverzicht opent de vragen/toetsmatrijs, Naar resultateninvoer opent score-invoer, Naar normeren opent cijferomzetting en Naar analyse opent de toetsanalyse voor dezelfde toets.",
+                },
+                {
+                    "question": "Ik zie mijn toets niet. Is hij weg?",
+                    "answer": "Waarschijnlijk staat er nog een filter aan. Klik op 'Filters wissen' om alle toetsen in het gekozen schooljaar te tonen.",
                 },
             ],
         }
@@ -2323,15 +2424,96 @@ class TestsPage(Page):
             return
         self.open_test_page.emit(page_label, test_id)
 
+    def restore_combo_value(self, combo: QComboBox, value: object) -> None:
+        index = combo.findData(value)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+
+    def reload_filter_options(self) -> None:
+        current_values = {
+            self.period_filter: self.period_filter.currentData(),
+            self.type_filter: self.type_filter.currentData(),
+            self.level_filter: self.level_filter.currentData(),
+            self.grade_filter: self.grade_filter.currentData(),
+            self.resit_filter: self.resit_filter.currentData(),
+        }
+        combos = list(current_values)
+        for combo in combos:
+            combo.blockSignals(True)
+            combo.clear()
+        self.period_filter.addItem("Alle periodes", None)
+        self.type_filter.addItem("Alle toetssoorten", None)
+        self.level_filter.addItem("Alle niveaus", None)
+        self.grade_filter.addItem("Alle jaarlagen", None)
+        self.resit_filter.addItem("Alle toetsen", None)
+        self.resit_filter.addItem("Gewone toetsen", 0)
+        self.resit_filter.addItem("Herkansingen", 1)
+        rows = self.database.rows(
+            "SELECT DISTINCT period, test_type, level, grade_year FROM tests WHERE school_year_id=?",
+            (self.year_id,),
+        ) if self.year_id else []
+        for period in sorted({row["period"] for row in rows if row["period"]}, key=str.lower):
+            self.period_filter.addItem(period, period)
+        for test_type in sorted({row["test_type"] for row in rows if row["test_type"]}, key=str.lower):
+            self.type_filter.addItem(test_type, test_type)
+        for level in sorted({row["level"] for row in rows if row["level"]}, key=str.lower):
+            self.level_filter.addItem(level, level)
+        for grade in sorted({row["grade_year"] for row in rows if row["grade_year"]}, key=str.lower):
+            self.grade_filter.addItem(grade, grade)
+        for combo, value in current_values.items():
+            self.restore_combo_value(combo, value)
+            combo.blockSignals(False)
+
+    def clear_filters(self) -> None:
+        self.search_filter.blockSignals(True)
+        self.search_filter.clear()
+        self.search_filter.blockSignals(False)
+        for combo in (
+            self.period_filter,
+            self.type_filter,
+            self.level_filter,
+            self.grade_filter,
+            self.resit_filter,
+        ):
+            combo.blockSignals(True)
+            combo.setCurrentIndex(0)
+            combo.blockSignals(False)
+        self.refresh()
+
     def refresh(self) -> None:
+        self.reload_filter_options()
+        where_clauses = ["t.school_year_id=?"]
+        parameters: list[object] = [self.year_id]
+        search_text = self.search_filter.text().strip()
+        if search_text:
+            like = f"%{search_text}%"
+            where_clauses.append(
+                "(t.name LIKE ? OR t.period LIKE ? OR t.test_type LIKE ? OR t.level LIKE ? OR t.grade_year LIKE ?)"
+            )
+            parameters.extend([like, like, like, like, like])
+        if self.period_filter.currentData():
+            where_clauses.append("t.period=?")
+            parameters.append(self.period_filter.currentData())
+        if self.type_filter.currentData():
+            where_clauses.append("t.test_type=?")
+            parameters.append(self.type_filter.currentData())
+        if self.level_filter.currentData():
+            where_clauses.append("t.level=?")
+            parameters.append(self.level_filter.currentData())
+        if self.grade_filter.currentData():
+            where_clauses.append("t.grade_year=?")
+            parameters.append(self.grade_filter.currentData())
+        if self.resit_filter.currentData() is not None:
+            where_clauses.append("t.is_resit=?")
+            parameters.append(self.resit_filter.currentData())
+        where_sql = " AND ".join(where_clauses)
         rows = self.database.rows(
             "SELECT t.id, t.name, t.period, t.test_type, original.name AS original_name, t.level, "
             "t.grade_year, t.weight, COUNT(q.id) AS question_count, "
             "COALESCE(SUM(q.maximum_score), 0) AS total_points FROM tests t "
             "LEFT JOIN tests original ON original.id=t.original_test_id "
-            "LEFT JOIN matrix_questions q ON q.test_id=t.id WHERE t.school_year_id=? "
+            f"LEFT JOIN matrix_questions q ON q.test_id=t.id WHERE {where_sql} "
             "GROUP BY t.id ORDER BY t.created_at DESC",
-            (self.year_id,),
+            tuple(parameters),
         ) if self.year_id else []
         self.empty_state.setVisible(not rows)
         self.table.setVisible(bool(rows))

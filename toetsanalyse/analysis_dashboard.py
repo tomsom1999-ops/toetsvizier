@@ -57,7 +57,7 @@ h1 {{ font-size:23px; margin:0 0 5px; letter-spacing:-.02em; }}
 .tab.active {{ color:var(--primary); border-bottom-color:var(--primary); }}
 .view {{ display:none; }}
 .view.active {{ display:block; }}
-.card {{ background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px; box-shadow:var(--shadow); }}
+.card {{ background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px; box-shadow:var(--shadow); min-width:0; }}
 .kpis {{ display:grid; grid-template-columns:repeat(6,minmax(102px,1fr)); gap:8px; margin-bottom:10px; }}
 .kpi {{ min-height:78px; padding:10px 13px; }}
 .kpi-label {{ color:var(--muted); font-size:11px; }}
@@ -159,10 +159,13 @@ td.num {{ font-variant-numeric:tabular-nums; }}
 .difficulty-list h3 {{ margin:0 0 8px; font-size:12px; color:var(--green); }}
 .difficulty-list h3.weak {{ color:var(--red); }}
 .question-line {{ display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #f0f2f6; }}
-.group-grid {{ display:grid; grid-template-columns:repeat(3,minmax(280px,1fr)); gap:10px; }}
+.group-grid {{ display:grid; grid-template-columns:repeat(3,minmax(300px,1fr)); gap:10px; }}
 #groupDimensionCards {{ display:contents; }}
-.chart-card {{ min-height:308px; }}
-.chart {{ height:238px; }}
+.chart-card {{ min-height:308px; overflow:hidden; min-width:0; }}
+.chart {{ height:238px; width:100%; min-width:0; overflow:hidden; }}
+.chart .js-plotly-plot,
+.chart .plot-container,
+.chart .svg-container {{ max-width:100% !important; overflow:hidden !important; }}
 .chart-note {{ margin-top:5px; border:1px solid #e4e9fa; background:#f8f9ff; padding:9px 11px; border-radius:8px; color:#52627e; font-size:12px; }}
 .resit-card {{ margin-bottom:10px; }}
 .resit-summary {{ display:grid; grid-template-columns:repeat(4,minmax(120px,1fr)); gap:8px; }}
@@ -974,8 +977,9 @@ function renderGroupCharts() {{
       marker:{{size:6, color:"#2f9350"}},
       hovertemplate:"Cijfer <= %{{x}}: %{{y:.1f}}%<extra></extra>"
     }}], Object.assign(baseLayout(), {{
-      xaxis: {{title:"Cijfergrens", dtick:1, range:[1,10], fixedrange:true, gridcolor:colors.grid}},
-      yaxis: {{title:"Cumulatief %", range:[0,100], ticksuffix:"%", fixedrange:true, gridcolor:colors.grid, zeroline:false}}
+      margin:{{l:48,r:18,t:8,b:42}},
+      xaxis: {{title:"Cijfergrens", dtick:1, range:[0.9,10.1], fixedrange:true, gridcolor:colors.grid}},
+      yaxis: {{title:"Cumulatief %", range:[0,100], ticksuffix:"%", fixedrange:true, gridcolor:colors.grid, zeroline:false, automargin:true}}
     }}), plotConfig);
   }}
   const attention = data.item_analysis.filter(item => item.status.level !== "good").slice(0, 8);

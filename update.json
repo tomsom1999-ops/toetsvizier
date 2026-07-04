@@ -1,26 +1,28 @@
 {
-  "latest_version": "0.3.2",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.3.2",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.3.2/ToetsVizier-0.3.2-windows-installer.exe",
-  "release_notes": "Update 0.3.2 verbetert de score-invoer visueel en maakt N-scores duidelijker zonder dat het scherm drukker wordt. De actieve leerling, actieve vraagkolom, opslagstatus en vraaginformatie zijn beter zichtbaar, zodat invoeren rustiger en minder foutgevoelig wordt.",
+  "latest_version": "0.3.3",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.3.3",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.3.3/ToetsVizier-0.3.3-windows-installer.exe",
+  "release_notes": "Update 0.3.3 maakt ToetsVizier rustiger bij updates, sneller bij toetsnavigatie en flexibeler bij score-invoer. De updatewizard past pakketten nu op de achtergrond toe, het toetsenmenu heeft filters en directe vervolgknoppen, het vragenoverzicht toont meerkeuzesleutels en resultateninvoer heeft een nieuwe gecombineerde invoermodus.",
   "versions": [
     {
-      "version": "0.3.2",
+      "version": "0.3.3",
       "type": "patch",
-      "title": "Resultateninvoer duidelijker en rustiger",
+      "title": "Gecombineerde score-invoer en betere navigatie",
       "changes": [
-        "De leerling die u aan het invoeren bent wordt duidelijk gemarkeerd in de vaste leerlingkolom.",
-        "De actieve vraagkolom krijgt een subtiele markering, zodat zichtbaar blijft in welke vraag u werkt.",
-        "De actieve scorecel krijgt een duidelijke rand zonder de score-invoer te verstoren.",
-        "N-scores worden nu overal als N teruggetoond en subtiel oranje gemarkeerd. Ze tellen nog steeds als 0 punten.",
-        "Een complete rij krijgt een blauwe totaalscore in plaats van groen, zodat dit beter te onderscheiden is van goed/fout-kleuren.",
-        "Boven de scoretabel staat nu een korte invoerhulp met sneltoetsen en kleurbetekenis.",
-        "Het invoerscherm toont een opslagstatus, zodat zichtbaar is of een wijziging is opgeslagen.",
-        "Kolomkoppen van vragen tonen extra informatie, zoals maximumscore, omschrijving, tijdindicatie en meerkeuzesleutel."
+        "De updatewizard past updatepakketten nu op de achtergrond toe, zodat Windows minder snel 'reageert niet' toont tijdens het klaarzetten van een update.",
+        "Het toetsenmenu heeft filteropties voor zoeken, periode, toetssoort, niveau, jaarlaag en gewone toets/herkansing.",
+        "Vanuit het toetsenmenu kunt u nu direct doorgaan naar het vragenoverzicht, resultateninvoer, normering of toetsanalyse van de geselecteerde toets.",
+        "Het vragenoverzicht toont bij meerkeuzevragen de antwoordsleutel, zodat u direct ziet welk antwoord hoort bij een vraag.",
+        "Resultateninvoer heeft een nieuwe invoerrichting 'Gecombineerd': u voert een blokje vragen horizontaal in en springt daarna automatisch naar de volgende leerling.",
+        "Bij gecombineerde invoer kiest u zelf de beginvraag, het aantal vragen per blok en de richting omhoog/omlaag.",
+        "De gecombineerde invoer werkt ook in het vergrote invoervenster.",
+        "Na het afronden van een blok bij alle leerlingen gaat ToetsVizier automatisch door naar het volgende blok en keert de invoerrichting om.",
+        "De invoerhulp legt de nieuwe gecombineerde invoermodus uit.",
+        "De cumulatieve frequentiegrafiek in de toetsanalyse blijft beter binnen de kaart en snijdt minder snel tekst of assen af."
       ]
     }
   ],
-  "package_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.3.2/ToetsVizier-update-0.3.2.zip",
+  "package_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.3.3/ToetsVizier-update-0.3.3.zip",
   "update_type": "package",
-  "package_sha256": "5E4604D4B1D5C9DBBB339586BBB397392AB7A75C699D80C2993D9BB74A56E943"
+  "package_sha256": "B1E18D0599BFB4FD2D2B8A2D1F98FD19A124399878A9B13F817B57087A213B0D"
 }

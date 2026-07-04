@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QScrollArea,
     QSizePolicy,
+    QSpinBox,
     QStyledItemDelegate,
     QTableWidget,
     QTableWidgetItem,
@@ -577,6 +578,7 @@ class ResultsPage(Page):
         self.direction.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.direction.addItem("Per leerling (horizontaal)", "horizontal")
         self.direction.addItem("Per vraag (verticaal)", "vertical")
+        self.direction.addItem("Gecombineerd", "hybrid")
         self.direction.currentIndexChanged.connect(self.update_vertical_direction_visibility)
         self.vertical_direction = QComboBox()
         self.vertical_direction.setMinimumWidth(140)
@@ -585,6 +587,23 @@ class ResultsPage(Page):
         self.vertical_direction.addItem("Omlaag", "down")
         self.vertical_direction.addItem("Omhoog", "up")
         self._large_vertical_direction: QComboBox | None = None
+        self.horizontal_block_size = QSpinBox()
+        self.horizontal_block_size.setRange(1, 99)
+        self.horizontal_block_size.setValue(3)
+        self.horizontal_block_size.setSuffix(" vragen")
+        self.horizontal_block_size.setMinimumWidth(130)
+        self.horizontal_block_size.setMaximumWidth(170)
+        self.horizontal_block_size.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.horizontal_block_size.valueChanged.connect(self.set_horizontal_block_size)
+        self._large_horizontal_block_size: QSpinBox | None = None
+        self.hybrid_begin_question = QSpinBox()
+        self.hybrid_begin_question.setRange(1, 99)
+        self.hybrid_begin_question.setValue(1)
+        self.hybrid_begin_question.setMinimumWidth(120)
+        self.hybrid_begin_question.setMaximumWidth(150)
+        self.hybrid_begin_question.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.hybrid_begin_question.valueChanged.connect(self.set_hybrid_begin_question)
+        self._large_hybrid_begin_question: QSpinBox | None = None
         self.half_points = QCheckBox("Halve punten mogelijk")
         self.half_points.setMinimumWidth(170)
         self.half_points.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -640,7 +659,9 @@ class ResultsPage(Page):
                 ("Klas/groep", self.class_filter),
                 ("Status", self.status_filter),
                 ("Invoerrichting", self.direction),
-                ("Verticaal", self.vertical_direction),
+                ("Richting", self.vertical_direction),
+                ("Beginvraag", self.hybrid_begin_question),
+                ("Aantal horizontaal", self.horizontal_block_size),
                 ("Opties", self.half_points),
             ],
             minimum_field_width=220,
@@ -648,6 +669,8 @@ class ResultsPage(Page):
         )
         layout.addWidget(self.filter_card)
         self.vertical_direction_field = self.vertical_direction.parentWidget()
+        self.hybrid_begin_question_field = self.hybrid_begin_question.parentWidget()
+        self.horizontal_block_size_field = self.horizontal_block_size.parentWidget()
         self.update_vertical_direction_visibility()
         self.summary = QLabel()
         self.summary.setStyleSheet("font-weight:600; color:#071f42;")
@@ -687,6 +710,7 @@ class ResultsPage(Page):
         self.input_guide = QLabel(
             "Sneltoetsen: N = vraag niet gemaakt | Delete/Backspace = score wissen | "
             "cijfers/letters = invoeren | Enter/pijltjes = navigeren. "
+            "Invoerrichting: horizontaal = per leerling, verticaal = per vraag, gecombineerd = vanaf Beginvraag blokjes vragen per leerling. "
             "Kleuren: blauwe totaalscore = rij compleet | oranje N = vraag niet gemaakt | "
             "groen/rood = meerkeuze goed/fout."
         )
@@ -751,9 +775,9 @@ class ResultsPage(Page):
                 },
                 {
                     "title": "Scores handmatig invoeren",
-                    "text": "U kunt invoeren per leerling of per vraag. Een getal mag niet lager zijn dan nul en niet hoger dan het maximum van de vraag.",
+                    "text": "U kunt invoeren per leerling, per vraag of gecombineerd. Bij gecombineerd vult u eerst een aantal vragen horizontaal in en springt daarna naar de volgende leerling.",
                     "action": "Kies de invoerrichting die bij uw nakijkwerk past en typ de scores in de cellen. Met Delete wist u een score.",
-                    "tip": "Typ N wanneer een leerling een losse vraag niet heeft gemaakt. Dit telt als 0 punten, maar blijft zichtbaar als bewuste N-invoer.",
+                    "tip": "Bij gecombineerd kiest u ook Beginvraag, omhoog/omlaag en hoeveel vragen per leerling horizontaal worden ingevuld.",
                 },
                 {
                     "title": "Groot invoerscherm gebruiken",
@@ -911,11 +935,21 @@ class ResultsPage(Page):
         )
 
     def update_vertical_direction_visibility(self, _index: int | None = None) -> None:
-        visible = self.direction.currentData() == "vertical"
-        field = getattr(self, "vertical_direction_field", None)
-        if field is not None:
-            field.setVisible(visible)
-        self.vertical_direction.setVisible(visible)
+        direction = self.direction.currentData()
+        vertical_visible = direction in {"vertical", "hybrid"}
+        block_visible = direction == "hybrid"
+        vertical_field = getattr(self, "vertical_direction_field", None)
+        if vertical_field is not None:
+            vertical_field.setVisible(vertical_visible)
+        begin_field = getattr(self, "hybrid_begin_question_field", None)
+        if begin_field is not None:
+            begin_field.setVisible(block_visible)
+        block_field = getattr(self, "horizontal_block_size_field", None)
+        if block_field is not None:
+            block_field.setVisible(block_visible)
+        self.vertical_direction.setVisible(vertical_visible)
+        self.hybrid_begin_question.setVisible(block_visible)
+        self.horizontal_block_size.setVisible(block_visible)
 
     def set_vertical_entry_direction(self, value: str) -> None:
         for combo in (self.vertical_direction, self._large_vertical_direction):
@@ -927,6 +961,25 @@ class ResultsPage(Page):
             combo.blockSignals(True)
             combo.setCurrentIndex(index)
             combo.blockSignals(False)
+
+    def set_horizontal_block_size(self, value: int) -> None:
+        value = max(1, int(value))
+        for spin_box in (self.horizontal_block_size, self._large_horizontal_block_size):
+            if spin_box is None or spin_box.value() == value:
+                continue
+            spin_box.blockSignals(True)
+            spin_box.setValue(value)
+            spin_box.blockSignals(False)
+
+    def set_hybrid_begin_question(self, value: int) -> None:
+        maximum = max(1, len(self.questions))
+        value = max(1, min(int(value), maximum))
+        for spin_box in (self.hybrid_begin_question, self._large_hybrid_begin_question):
+            if spin_box is None or spin_box.value() == value:
+                continue
+            spin_box.blockSignals(True)
+            spin_box.setValue(value)
+            spin_box.blockSignals(False)
 
     def open_large_input_dialog(self) -> None:
         if self.test.currentData() is None or not self.score_panel.isVisible():
@@ -958,6 +1011,7 @@ class ResultsPage(Page):
         large_direction = QComboBox()
         large_direction.addItem("Per leerling (horizontaal)", "horizontal")
         large_direction.addItem("Per vraag (verticaal)", "vertical")
+        large_direction.addItem("Gecombineerd", "hybrid")
         large_direction.setMinimumWidth(220)
         large_direction.setMaximumWidth(280)
         large_vertical_direction = QComboBox()
@@ -966,6 +1020,19 @@ class ResultsPage(Page):
         large_vertical_direction.setMinimumWidth(120)
         large_vertical_direction.setMaximumWidth(150)
         self._large_vertical_direction = large_vertical_direction
+        large_hybrid_begin_question = QSpinBox()
+        large_hybrid_begin_question.setRange(1, max(1, len(self.questions)))
+        large_hybrid_begin_question.setValue(self.hybrid_begin_question.value())
+        large_hybrid_begin_question.setMinimumWidth(105)
+        large_hybrid_begin_question.setMaximumWidth(135)
+        self._large_hybrid_begin_question = large_hybrid_begin_question
+        large_horizontal_block_size = QSpinBox()
+        large_horizontal_block_size.setRange(1, 99)
+        large_horizontal_block_size.setValue(self.horizontal_block_size.value())
+        large_horizontal_block_size.setSuffix(" vragen")
+        large_horizontal_block_size.setMinimumWidth(120)
+        large_horizontal_block_size.setMaximumWidth(160)
+        self._large_horizontal_block_size = large_horizontal_block_size
         large_direction_index = large_direction.findData(self.direction.currentData())
         if large_direction_index >= 0:
             large_direction.setCurrentIndex(large_direction_index)
@@ -977,17 +1044,34 @@ class ResultsPage(Page):
             direction_index = self.direction.findData(large_direction.currentData())
             if direction_index >= 0:
                 self.direction.setCurrentIndex(direction_index)
-            large_vertical_field.setVisible(large_direction.currentData() == "vertical")
+            direction = large_direction.currentData()
+            large_vertical_field.setVisible(direction in {"vertical", "hybrid"})
+            large_begin_field.setVisible(direction == "hybrid")
+            large_horizontal_block_field.setVisible(direction == "hybrid")
 
         def sync_large_vertical_direction(_index: int) -> None:
             self.set_vertical_entry_direction(str(large_vertical_direction.currentData()))
 
+        def sync_large_horizontal_block_size(value: int) -> None:
+            self.set_horizontal_block_size(value)
+
+        def sync_large_hybrid_begin_question(value: int) -> None:
+            self.set_hybrid_begin_question(value)
+
         large_direction.currentIndexChanged.connect(sync_large_direction)
         header_row.addWidget(make_filter_field("Invoerrichting", large_direction))
-        large_vertical_field = make_filter_field("Verticaal", large_vertical_direction)
-        large_vertical_field.setVisible(large_direction.currentData() == "vertical")
+        large_vertical_field = make_filter_field("Richting", large_vertical_direction)
+        large_vertical_field.setVisible(large_direction.currentData() in {"vertical", "hybrid"})
         large_vertical_direction.currentIndexChanged.connect(sync_large_vertical_direction)
         header_row.addWidget(large_vertical_field)
+        large_begin_field = make_filter_field("Beginvraag", large_hybrid_begin_question)
+        large_begin_field.setVisible(large_direction.currentData() == "hybrid")
+        large_hybrid_begin_question.valueChanged.connect(sync_large_hybrid_begin_question)
+        header_row.addWidget(large_begin_field)
+        large_horizontal_block_field = make_filter_field("Aantal horizontaal", large_horizontal_block_size)
+        large_horizontal_block_field.setVisible(large_direction.currentData() == "hybrid")
+        large_horizontal_block_size.valueChanged.connect(sync_large_horizontal_block_size)
+        header_row.addWidget(large_horizontal_block_field)
         close_button = compact_action_button(
             set_button_role(QPushButton("Vergroot venster sluiten"), "primary"),
             "Sluit het vergrote invoerscherm en plaats de tabel terug op de gewone pagina.",
@@ -1027,6 +1111,8 @@ class ResultsPage(Page):
             self.score_host_layout.addWidget(self.score_panel)
             self.large_input_button.setVisible(True)
             self._large_vertical_direction = None
+            self._large_hybrid_begin_question = None
+            self._large_horizontal_block_size = None
             self._large_input_dialog_open = False
             self.update_entry_visibility()
 
@@ -1043,6 +1129,7 @@ class ResultsPage(Page):
             self.question_header.set_active_column(-1)
         self.table.clear()
         self.questions = test_questions(self.database, test_id) if test_id is not None else []
+        self.update_hybrid_question_ranges()
         self.all_students = test_students(self.database, test_id) if test_id is not None else []
         class_names = sorted(
             {name for student in self.all_students for name in self.group_names(student.get("groups", ""))},
@@ -1175,6 +1262,17 @@ class ResultsPage(Page):
         self.loading = False
         self.update_summary()
         self.set_save_state("saved")
+
+    def update_hybrid_question_ranges(self) -> None:
+        maximum = max(1, len(self.questions))
+        for spin_box in (self.hybrid_begin_question, self._large_hybrid_begin_question):
+            if spin_box is None:
+                continue
+            spin_box.blockSignals(True)
+            spin_box.setRange(1, maximum)
+            if spin_box.value() > maximum:
+                spin_box.setValue(maximum)
+            spin_box.blockSignals(False)
 
     @staticmethod
     def question_tooltip(question: dict) -> str:
@@ -1474,6 +1572,8 @@ class ResultsPage(Page):
         row_count = self.table.rowCount()
         direction = self.direction.currentData()
         vertical_direction = str(self.vertical_direction.currentData() or "down")
+        block_size = max(1, int(self.horizontal_block_size.value()))
+        begin_column = min(last, first + max(0, int(self.hybrid_begin_question.value()) - 1))
         next_row, next_column = row, column
         for _ in range(max(1, row_count * len(self.questions))):
             if direction == "vertical":
@@ -1495,6 +1595,32 @@ class ResultsPage(Page):
                         next_row = row_count - 1
                         vertical_direction = "up"
                         self.set_vertical_entry_direction(vertical_direction)
+            elif direction == "hybrid":
+                block_start = begin_column + ((next_column - begin_column) // block_size) * block_size
+                block_start = max(first, min(block_start, last))
+                block_end = min(block_start + block_size - 1, last)
+                if next_column < block_end:
+                    next_column += 1
+                elif vertical_direction == "up":
+                    next_column = block_start
+                    next_row -= 1
+                    if next_row < 0:
+                        next_column = block_end + 1
+                        if next_column > last:
+                            return
+                        next_row = 0
+                        vertical_direction = "down"
+                        self.set_vertical_entry_direction(vertical_direction)
+                else:
+                    next_column = block_start
+                    next_row += 1
+                    if next_row >= row_count:
+                        next_column = block_end + 1
+                        if next_column > last:
+                            return
+                        next_row = row_count - 1
+                        vertical_direction = "up"
+                        self.set_vertical_entry_direction(vertical_direction)
             else:
                 next_column += 1
                 if next_column > last:
@@ -1504,6 +1630,12 @@ class ResultsPage(Page):
                 return
             status_widget = self.status_widget_for_row(next_row)
             if isinstance(status_widget, QComboBox) and status_widget.currentText() != self.FILTER_MADE:
+                if direction == "hybrid":
+                    skipped_block_start = begin_column + ((next_column - begin_column) // block_size) * block_size
+                    skipped_block_start = max(first, min(skipped_block_start, last))
+                    skipped_block_end = min(skipped_block_start + block_size - 1, last)
+                    if next_column == skipped_block_start:
+                        next_column = skipped_block_end
                 continue
             next_cell = self.table.item(next_row, next_column)
             if next_cell is None:
