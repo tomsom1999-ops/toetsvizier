@@ -8,6 +8,7 @@ from toetsanalyse.self_update import (
     apply_update_package,
     build_installer_launch_command,
     installer_extension_from_url,
+    stage_update_package_for_external_apply,
     stage_update_package_for_restart,
     update_package_extension_from_url,
     validate_update_package,
@@ -126,3 +127,31 @@ class SelfUpdateTests(unittest.TestCase):
             self.assertIn("Copy-Tree", script)
             self.assertIn("Wait-Process", script)
             self.assertTrue((script_path.parent / "new-files.txt").exists())
+
+    def test_external_apply_stage_defers_heavy_work_until_after_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "app"
+            root.mkdir()
+            executable = root / "ToetsVizier.exe"
+            executable.write_text("old", encoding="utf-8")
+            package = Path(directory) / "update.zip"
+            with zipfile.ZipFile(package, "w") as archive:
+                archive.writestr("manifest.json", "{}")
+                archive.writestr("ToetsVizier.exe", "new")
+                archive.writestr("_internal/base_library.zip", "runtime")
+
+            script_path, backup_dir = stage_update_package_for_external_apply(
+                package,
+                app_root=root,
+                backup_root=Path(directory) / "backups",
+                staging_root=Path(directory) / "stage",
+            )
+
+            self.assertEqual("old", executable.read_text(encoding="utf-8"))
+            self.assertFalse((backup_dir / "files" / "ToetsVizier.exe").exists())
+            self.assertFalse((script_path.parent / "payload").exists())
+            self.assertTrue((script_path.parent / "files.txt").exists())
+            script = script_path.read_text(encoding="utf-8")
+            self.assertIn("OpenRead($package)", script)
+            self.assertIn("Extract-ZipEntryWithRetry", script)
+            self.assertIn("Wait-Process", script)

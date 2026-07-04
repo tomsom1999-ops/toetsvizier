@@ -363,7 +363,180 @@ try {{
 
 $exe = Join-Path $root 'ToetsVizier.exe'
 if (Test-Path -LiteralPath $exe) {{
-    Start-Process -FilePath $exe
+    try {{
+        Start-Process -FilePath $exe
+    }} catch {{
+        Add-Content -LiteralPath $log -Value ('ToetsVizier kon niet automatisch opnieuw worden gestart: ' + $_.Exception.Message)
+    }}
+}}
+"""
+    script_path.write_text(script.strip() + "\n", encoding="utf-8")
+
+
+def _write_deferred_update_script(
+    script_path: Path,
+    *,
+    root: Path,
+    package_path: Path,
+    files_path: Path,
+    backup_files_dir: Path,
+    log_path: Path,
+    new_files_path: Path,
+    app_pid: int | None = None,
+) -> None:
+    script = f"""
+$ErrorActionPreference = 'Stop'
+$appProcessId = {int(app_pid or 0)}
+if ($appProcessId -gt 0) {{
+    try {{
+        Wait-Process -Id $appProcessId -Timeout 90 -ErrorAction SilentlyContinue
+    }} catch {{
+    }}
+}}
+Start-Sleep -Milliseconds 800
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+$root = {_powershell_literal(root)}
+$package = {_powershell_literal(package_path)}
+$filesList = {_powershell_literal(files_path)}
+$backup = {_powershell_literal(backup_files_dir)}
+$log = {_powershell_literal(log_path)}
+$newFiles = {_powershell_literal(new_files_path)}
+
+function Write-UpdateLog($message) {{
+    $line = ('{{0}} {{1}}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $message)
+    Add-Content -LiteralPath $log -Value $line
+}}
+
+function Get-TargetPath($relativePath) {{
+    $cleanRelative = $relativePath -replace '/', [System.IO.Path]::DirectorySeparatorChar
+    return Join-Path $root $cleanRelative
+}}
+
+function Ensure-ParentDirectory($path) {{
+    $directory = Split-Path -Parent $path
+    if ($directory) {{
+        New-Item -ItemType Directory -Force -Path $directory | Out-Null
+    }}
+}}
+
+function Invoke-WithRetry($label, [scriptblock]$action) {{
+    $lastError = $null
+    for ($attempt = 1; $attempt -le 10; $attempt++) {{
+        try {{
+            & $action
+            return
+        }} catch {{
+            $lastError = $_
+            Start-Sleep -Milliseconds (350 * $attempt)
+        }}
+    }}
+    if ($lastError) {{
+        throw $lastError
+    }}
+    throw $label
+}}
+
+function Copy-FileWithRetry($source, $target) {{
+    Invoke-WithRetry ('Kopieren mislukt: ' + $source) {{
+        Ensure-ParentDirectory $target
+        Copy-Item -LiteralPath $source -Destination $target -Force
+    }}
+}}
+
+function Extract-ZipEntryWithRetry($archive, $relativePath) {{
+    $zipName = $relativePath.Replace('\\', '/')
+    $target = Get-TargetPath $relativePath
+    Invoke-WithRetry ('Uitpakken mislukt: ' + $relativePath) {{
+        $entry = $archive.GetEntry($zipName)
+        if ($null -eq $entry) {{
+            throw ('Bestand ontbreekt in updatepakket: ' + $zipName)
+        }}
+        Ensure-ParentDirectory $target
+        $source = $entry.Open()
+        try {{
+            $destination = [System.IO.File]::Open($target, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+            try {{
+                $source.CopyTo($destination)
+            }} finally {{
+                $destination.Dispose()
+            }}
+        }} finally {{
+            $source.Dispose()
+        }}
+    }}
+}}
+
+function Backup-ExistingFiles($relativePaths) {{
+    foreach ($relative in $relativePaths) {{
+        $target = Get-TargetPath $relative
+        if (Test-Path -LiteralPath $target -PathType Leaf) {{
+            $backupTarget = Join-Path $backup ($relative -replace '/', [System.IO.Path]::DirectorySeparatorChar)
+            Copy-FileWithRetry $target $backupTarget
+        }}
+    }}
+}}
+
+function Restore-BackupFiles() {{
+    if (-not (Test-Path -LiteralPath $backup)) {{
+        return
+    }}
+    Get-ChildItem -LiteralPath $backup -Recurse -File | ForEach-Object {{
+        $relative = $_.FullName.Substring($backup.Length).TrimStart('\\')
+        $target = Join-Path $root $relative
+        Copy-FileWithRetry $_.FullName $target
+    }}
+}}
+
+function Remove-NewFiles() {{
+    if (-not (Test-Path -LiteralPath $newFiles)) {{
+        return
+    }}
+    Get-Content -LiteralPath $newFiles | ForEach-Object {{
+        $relative = $_.Trim()
+        if ($relative) {{
+            $target = Get-TargetPath $relative
+            if (Test-Path -LiteralPath $target -PathType Leaf) {{
+                Remove-Item -LiteralPath $target -Force
+            }}
+        }}
+    }}
+}}
+
+try {{
+    Write-UpdateLog 'Update toepassen gestart.'
+    $relativePaths = @(Get-Content -LiteralPath $filesList | Where-Object {{ $_.Trim() }})
+    Backup-ExistingFiles $relativePaths
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($package)
+    try {{
+        foreach ($relative in $relativePaths) {{
+            Extract-ZipEntryWithRetry $archive $relative
+        }}
+    }} finally {{
+        if ($archive) {{
+            $archive.Dispose()
+        }}
+    }}
+    Write-UpdateLog 'Updatepakket toegepast.'
+}} catch {{
+    Write-UpdateLog ('Updatepakket mislukt: ' + $_.Exception.Message)
+    try {{
+        Restore-BackupFiles
+        Remove-NewFiles
+        Write-UpdateLog 'Back-up teruggezet.'
+    }} catch {{
+        Write-UpdateLog ('Terugzetten van back-up mislukt: ' + $_.Exception.Message)
+    }}
+    exit 1
+}}
+
+$exe = Join-Path $root 'ToetsVizier.exe'
+if (Test-Path -LiteralPath $exe) {{
+    try {{
+        Start-Process -FilePath $exe
+    }} catch {{
+        Write-UpdateLog ('ToetsVizier kon niet automatisch opnieuw worden gestart: ' + $_.Exception.Message)
+    }}
 }}
 """
     script_path.write_text(script.strip() + "\n", encoding="utf-8")
@@ -435,6 +608,71 @@ def stage_update_package_for_restart(
         script_path,
         root=root,
         payload_dir=payload_dir,
+        backup_files_dir=backup_files_dir,
+        log_path=backup_dir / "apply.log",
+        new_files_path=new_files_path,
+        app_pid=os.getpid(),
+    )
+    return script_path, backup_dir
+
+
+def stage_update_package_for_external_apply(
+    package_path: Path | str,
+    *,
+    app_root: Path | str | None = None,
+    backup_root: Path | str | None = None,
+    staging_root: Path | str | None = None,
+) -> tuple[Path, Path]:
+    """Prepare a tiny updater script; the heavy ZIP extraction runs after the app closes."""
+    root = Path(app_root) if app_root is not None else APP_ROOT
+    root = root.resolve()
+    package = Path(package_path).resolve()
+    paths = validate_update_package(package)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backups_base = (
+        Path(backup_root)
+        if backup_root is not None
+        else BACKUP_DIR / "updates"
+    )
+    backup_dir = backups_base / f"voor-updatepakket-{stamp}"
+    backup_files_dir = backup_dir / "files"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    new_paths = [path for path in paths if not (root / path).exists()]
+
+    stage_base = (
+        Path(staging_root)
+        if staging_root is not None
+        else Path(tempfile.gettempdir()) / "ToetsVizier-updates"
+    )
+    stage_dir = stage_base / f"deferred-update-{stamp}"
+    stage_dir.mkdir(parents=True, exist_ok=True)
+    files_path = stage_dir / "files.txt"
+    files_path.write_text(
+        "\n".join(path.as_posix() for path in paths) + ("\n" if paths else ""),
+        encoding="utf-8",
+    )
+    new_files_path = stage_dir / "new-files.txt"
+    new_files_path.write_text(
+        "\n".join(path.as_posix() for path in new_paths) + ("\n" if new_paths else ""),
+        encoding="utf-8",
+    )
+    manifest = {
+        "package": str(package),
+        "app_root": str(root),
+        "mode": "external-apply",
+        "files": [path.as_posix() for path in paths],
+        "new_files": [path.as_posix() for path in new_paths],
+    }
+    (backup_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    script_path = stage_dir / "apply-update.ps1"
+    _write_deferred_update_script(
+        script_path,
+        root=root,
+        package_path=package,
+        files_path=files_path,
         backup_files_dir=backup_files_dir,
         log_path=backup_dir / "apply.log",
         new_files_path=new_files_path,

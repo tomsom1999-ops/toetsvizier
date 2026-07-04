@@ -1,5 +1,5 @@
 {
-  "release_notes": "Update 0.3.3 maakt ToetsVizier rustiger bij updates, sneller bij toetsnavigatie en flexibeler bij score-invoer. De updatewizard past pakketten nu op de achtergrond toe, het toetsenmenu heeft filters en directe vervolgknoppen, het vragenoverzicht toont meerkeuzesleutels en resultateninvoer heeft een nieuwe gecombineerde invoermodus.",
+  "release_notes": "Update 0.3.4 is een herstelupdate voor het updateproces. De vorige 0.3.3-update kon in een geïnstalleerde versie downloaden en afsluiten zonder de echte executable bij te werken. Deze versie gebruikt weer een volledig app-updatepakket, past het zware uitpakken buiten de draaiende app toe en neemt alle wijzigingen uit 0.3.3 mee.",
   "download_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v{version}",
   "installer_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-{version}-windows-installer.exe",
   "package_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-update-{version}.zip",
@@ -8,9 +8,12 @@
     {
       "version": "{version}",
       "type": "patch",
-      "title": "Gecombineerde score-invoer en betere navigatie",
+      "title": "Herstelupdate voor geïnstalleerde app",
       "changes": [
-        "De updatewizard past updatepakketten nu op de achtergrond toe, zodat Windows minder snel 'reageert niet' toont tijdens het klaarzetten van een update.",
+        "Het updatepakket bevat nu weer de volledige geïnstalleerde appbestanden, waaronder ToetsVizier.exe en de interne programmamap.",
+        "Installaties die de eerdere lichte 0.3.3-update al hadden gedownload, krijgen met 0.3.4 opnieuw een update aangeboden.",
+        "De updatewizard sluit ToetsVizier eerst af en pakt het grote updatepakket daarna buiten de app uit, zodat Windows minder snel 'reageert niet' toont.",
+        "Het grote invoerscherm voor resultaten kan weer normaal worden gemaximaliseerd en als fullscreen-werkruimte worden gebruikt.",
         "Het toetsenmenu heeft filteropties voor zoeken, periode, toetssoort, niveau, jaarlaag en gewone toets/herkansing.",
         "Vanuit het toetsenmenu kunt u nu direct doorgaan naar het vragenoverzicht, resultateninvoer, normering of toetsanalyse van de geselecteerde toets.",
         "Het vragenoverzicht toont bij meerkeuzevragen de antwoordsleutel, zodat u direct ziet welk antwoord hoort bij een vraag.",

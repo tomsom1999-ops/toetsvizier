@@ -206,6 +206,7 @@ from .self_update import (
     download_update_package,
     launch_staged_update,
     launch_installer,
+    stage_update_package_for_external_apply,
     stage_update_package_for_restart,
     validate_update_package,
 )
@@ -353,7 +354,10 @@ class UpdateApplyThread(QThread):
                 path.suffix.casefold() == ".exe" for path in package_paths
             )
             if needs_restart_applier:
-                script_path, backup_dir = stage_update_package_for_restart(self.package_path)
+                if getattr(sys, "frozen", False):
+                    script_path, backup_dir = stage_update_package_for_external_apply(self.package_path)
+                else:
+                    script_path, backup_dir = stage_update_package_for_restart(self.package_path)
                 launch_staged_update(script_path)
                 applied_now = False
             else:
@@ -576,9 +580,10 @@ class UpdateAvailableDialog(QDialog):
             self,
             "Updatepakket toepassen",
             "Het updatepakket is gedownload.\n\n"
-            "ToetsVizier maakt nu een back-up van de appbestanden die worden vervangen. "
+            "ToetsVizier controleert het pakket en zet een veilige update klaar. "
             "Uw vakdatabases, back-ups, exports en instellingen worden niet overschreven.\n\n"
-            "Na het toepassen moet u ToetsVizier opnieuw starten.\n\n"
+            "Daarna sluit ToetsVizier af en wordt de update buiten de app toegepast. "
+            "Het programma start daarna opnieuw.\n\n"
             "Nu doorgaan?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
@@ -588,8 +593,8 @@ class UpdateAvailableDialog(QDialog):
         self.progress.setVisible(True)
         self.progress.setRange(0, 0)
         self.status_label.setText(
-            "Het updatepakket wordt gecontroleerd en klaargezet. "
-            "Dit kan even duren; sluit ToetsVizier nog niet af."
+            "Het updatepakket wordt gecontroleerd. ToetsVizier sluit zo af; "
+            "het uitpakken gebeurt daarna buiten de app."
         )
         self.download_button.setEnabled(False)
         self.release_page_button.setEnabled(False)

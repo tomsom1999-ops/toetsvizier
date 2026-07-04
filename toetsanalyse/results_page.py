@@ -995,6 +995,15 @@ class ResultsPage(Page):
         dialog = QDialog(self)
         dialog.setWindowTitle("Groot invoerscherm resultaten")
         fit_to_available_screen(dialog, 1500, 900, margin=32)
+        dialog.setWindowFlags(
+            dialog.windowFlags()
+            | Qt.WindowType.Window
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+            | Qt.WindowType.WindowCloseButtonHint
+        )
+        dialog.setMaximumSize(16777215, 16777215)
+        dialog.setSizeGripEnabled(True)
         dialog_layout = QVBoxLayout(dialog)
         dialog_layout.setContentsMargins(14, 14, 14, 14)
         dialog_layout.setSpacing(10)

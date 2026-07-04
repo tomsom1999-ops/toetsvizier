@@ -1,15 +1,18 @@
 {
-  "latest_version": "0.3.3",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.3.3",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.3.3/ToetsVizier-0.3.3-windows-installer.exe",
-  "release_notes": "Update 0.3.3 maakt ToetsVizier rustiger bij updates, sneller bij toetsnavigatie en flexibeler bij score-invoer. De updatewizard past pakketten nu op de achtergrond toe, het toetsenmenu heeft filters en directe vervolgknoppen, het vragenoverzicht toont meerkeuzesleutels en resultateninvoer heeft een nieuwe gecombineerde invoermodus.",
+  "latest_version": "0.3.4",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.3.4",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.3.4/ToetsVizier-0.3.4-windows-installer.exe",
+  "release_notes": "Update 0.3.4 is een herstelupdate voor het updateproces. De vorige 0.3.3-update kon in een ge\u00efnstalleerde versie downloaden en afsluiten zonder de echte executable bij te werken. Deze versie gebruikt weer een volledig app-updatepakket, past het zware uitpakken buiten de draaiende app toe en neemt alle wijzigingen uit 0.3.3 mee.",
   "versions": [
     {
-      "version": "0.3.3",
+      "version": "0.3.4",
       "type": "patch",
-      "title": "Gecombineerde score-invoer en betere navigatie",
+      "title": "Herstelupdate voor ge\u00efnstalleerde app",
       "changes": [
-        "De updatewizard past updatepakketten nu op de achtergrond toe, zodat Windows minder snel 'reageert niet' toont tijdens het klaarzetten van een update.",
+        "Het updatepakket bevat nu weer de volledige ge\u00efnstalleerde appbestanden, waaronder ToetsVizier.exe en de interne programmamap.",
+        "Installaties die de eerdere lichte 0.3.3-update al hadden gedownload, krijgen met 0.3.4 opnieuw een update aangeboden.",
+        "De updatewizard sluit ToetsVizier eerst af en pakt het grote updatepakket daarna buiten de app uit, zodat Windows minder snel 'reageert niet' toont.",
+        "Het grote invoerscherm voor resultaten kan weer normaal worden gemaximaliseerd en als fullscreen-werkruimte worden gebruikt.",
         "Het toetsenmenu heeft filteropties voor zoeken, periode, toetssoort, niveau, jaarlaag en gewone toets/herkansing.",
         "Vanuit het toetsenmenu kunt u nu direct doorgaan naar het vragenoverzicht, resultateninvoer, normering of toetsanalyse van de geselecteerde toets.",
         "Het vragenoverzicht toont bij meerkeuzevragen de antwoordsleutel, zodat u direct ziet welk antwoord hoort bij een vraag.",
@@ -22,7 +25,7 @@
       ]
     }
   ],
-  "package_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.3.3/ToetsVizier-update-0.3.3.zip",
+  "package_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.3.4/ToetsVizier-update-0.3.4.zip",
   "update_type": "package",
-  "package_sha256": "BA1D40522FC5F6FD79B4E9623F3C25031570B4EC6638006E6353F4367C496F31"
+  "package_sha256": "C0A60DED8130A28F5EF257B13F813967D19C2F784A74678BA1C85F0D1EF53E42"
 }
