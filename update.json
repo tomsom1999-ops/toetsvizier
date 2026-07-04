@@ -1,21 +1,22 @@
 {
-  "latest_version": "0.3.5",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.3.5",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.3.5/ToetsVizier-0.3.5-windows-installer.exe",
-  "release_notes": "Update 0.3.5 is een kleine patch voor de gecombineerde resultateninvoer. Bij het afronden van een blok schuift 'Beginvraag' nu automatisch mee naar het volgende blok, zodat duidelijk zichtbaar blijft welk vragenset u aan het invoeren bent.",
+  "latest_version": "0.3.6",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.3.6",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.3.6/ToetsVizier-0.3.6-windows-installer.exe",
+  "release_notes": "Update 0.3.6 verbetert de gecombineerde resultateninvoer bij toetsen met subvragen. 'Beginvraag' is nu een echte vraagkeuze, zoals 6b, en 'Aantal horizontaal' telt vanaf daar het aantal zichtbare scorekolommen.",
   "versions": [
     {
-      "version": "0.3.5",
+      "version": "0.3.6",
       "type": "patch",
-      "title": "Beginvraag schuift mee bij gecombineerde invoer",
+      "title": "Gecombineerde invoer werkt correct met subvragen",
       "changes": [
-        "Bij gecombineerde score-invoer schuift 'Beginvraag' automatisch door naar de eerste vraag van het volgende blok.",
-        "Dit werkt zowel wanneer de invoerrichting omlaag als omhoog wisselt.",
-        "De uitleg in resultateninvoer benoemt nu dat Beginvraag automatisch meeloopt."
+        "Beginvraag is nu een keuzelijst met de echte vraaglabels uit de toets, bijvoorbeeld 6a of 6b.",
+        "Aantal horizontaal telt nu het aantal zichtbare scorekolommen vanaf de gekozen Beginvraag.",
+        "Bij het afronden van een blok schuift Beginvraag automatisch door naar het volgende vraaglabel.",
+        "Dezelfde werking is toegevoegd aan het vergrote invoerscherm."
       ]
     }
   ],
-  "package_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.3.5/ToetsVizier-update-0.3.5.zip",
+  "package_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.3.6/ToetsVizier-update-0.3.6.zip",
   "update_type": "package",
-  "package_sha256": "289DEB871FFEAEABB8DF6FC5A225E9ACF3BD19891E30CF0F014B8E6E67BEEF18"
+  "package_sha256": "6B2DB4DB2D2AC2F546EB403957E62A1D2BDE4720A0DEBD8C556E95ADB0A29B59"
 }

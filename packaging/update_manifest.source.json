@@ -1,5 +1,5 @@
 {
-  "release_notes": "Update 0.3.5 is een kleine patch voor de gecombineerde resultateninvoer. Bij het afronden van een blok schuift 'Beginvraag' nu automatisch mee naar het volgende blok, zodat duidelijk zichtbaar blijft welk vragenset u aan het invoeren bent.",
+  "release_notes": "Update 0.3.6 verbetert de gecombineerde resultateninvoer bij toetsen met subvragen. 'Beginvraag' is nu een echte vraagkeuze, zoals 6b, en 'Aantal horizontaal' telt vanaf daar het aantal zichtbare scorekolommen.",
   "download_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v{version}",
   "installer_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-{version}-windows-installer.exe",
   "package_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-update-{version}.zip",
@@ -8,11 +8,12 @@
     {
       "version": "{version}",
       "type": "patch",
-      "title": "Beginvraag schuift mee bij gecombineerde invoer",
+      "title": "Gecombineerde invoer werkt correct met subvragen",
       "changes": [
-        "Bij gecombineerde score-invoer schuift 'Beginvraag' automatisch door naar de eerste vraag van het volgende blok.",
-        "Dit werkt zowel wanneer de invoerrichting omlaag als omhoog wisselt.",
-        "De uitleg in resultateninvoer benoemt nu dat Beginvraag automatisch meeloopt."
+        "Beginvraag is nu een keuzelijst met de echte vraaglabels uit de toets, bijvoorbeeld 6a of 6b.",
+        "Aantal horizontaal telt nu het aantal zichtbare scorekolommen vanaf de gekozen Beginvraag.",
+        "Bij het afronden van een blok schuift Beginvraag automatisch door naar het volgende vraaglabel.",
+        "Dezelfde werking is toegevoegd aan het vergrote invoerscherm."
       ]
     }
   ]

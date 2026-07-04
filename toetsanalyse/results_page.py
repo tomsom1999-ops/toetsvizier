@@ -590,20 +590,19 @@ class ResultsPage(Page):
         self.horizontal_block_size = QSpinBox()
         self.horizontal_block_size.setRange(1, 99)
         self.horizontal_block_size.setValue(3)
-        self.horizontal_block_size.setSuffix(" vragen")
+        self.horizontal_block_size.setSuffix(" kolommen")
         self.horizontal_block_size.setMinimumWidth(130)
         self.horizontal_block_size.setMaximumWidth(170)
         self.horizontal_block_size.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.horizontal_block_size.valueChanged.connect(self.set_horizontal_block_size)
         self._large_horizontal_block_size: QSpinBox | None = None
-        self.hybrid_begin_question = QSpinBox()
-        self.hybrid_begin_question.setRange(1, 99)
-        self.hybrid_begin_question.setValue(1)
+        self.hybrid_begin_question_offset = 0
+        self.hybrid_begin_question = QComboBox()
         self.hybrid_begin_question.setMinimumWidth(120)
-        self.hybrid_begin_question.setMaximumWidth(150)
+        self.hybrid_begin_question.setMaximumWidth(170)
         self.hybrid_begin_question.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.hybrid_begin_question.valueChanged.connect(self.set_hybrid_begin_question)
-        self._large_hybrid_begin_question: QSpinBox | None = None
+        self.hybrid_begin_question.currentIndexChanged.connect(self.hybrid_begin_question_changed)
+        self._large_hybrid_begin_question: QComboBox | None = None
         self.half_points = QCheckBox("Halve punten mogelijk")
         self.half_points.setMinimumWidth(170)
         self.half_points.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -710,7 +709,7 @@ class ResultsPage(Page):
         self.input_guide = QLabel(
             "Sneltoetsen: N = vraag niet gemaakt | Delete/Backspace = score wissen | "
             "cijfers/letters = invoeren | Enter/pijltjes = navigeren. "
-            "Invoerrichting: horizontaal = per leerling, verticaal = per vraag, gecombineerd = vanaf Beginvraag blokjes vragen per leerling; "
+            "Invoerrichting: horizontaal = per leerling, verticaal = per vraag, gecombineerd = vanaf de gekozen Beginvraag blokjes scorekolommen per leerling; "
             "Beginvraag schuift automatisch mee naar het volgende blok. "
             "Kleuren: blauwe totaalscore = rij compleet | oranje N = vraag niet gemaakt | "
             "groen/rood = meerkeuze goed/fout."
@@ -776,9 +775,9 @@ class ResultsPage(Page):
                 },
                 {
                     "title": "Scores handmatig invoeren",
-                    "text": "U kunt invoeren per leerling, per vraag of gecombineerd. Bij gecombineerd vult u eerst een aantal vragen horizontaal in en springt daarna naar de volgende leerling.",
+                    "text": "U kunt invoeren per leerling, per vraag of gecombineerd. Bij gecombineerd vult u eerst een aantal scorekolommen horizontaal in en springt daarna naar de volgende leerling.",
                     "action": "Kies de invoerrichting die bij uw nakijkwerk past en typ de scores in de cellen. Met Delete wist u een score.",
-                    "tip": "Bij gecombineerd kiest u Beginvraag en het aantal vragen per blok. Zodra een blok klaar is, schuift Beginvraag automatisch door naar het volgende blok.",
+                    "tip": "Bij gecombineerd kiest u bij Beginvraag het echte vraaglabel, bijvoorbeeld 6b. Aantal horizontaal telt vanaf daar hoeveel zichtbare kolommen u per leerling invoert.",
                 },
                 {
                     "title": "Groot invoerscherm gebruiken",
@@ -972,15 +971,53 @@ class ResultsPage(Page):
             spin_box.setValue(value)
             spin_box.blockSignals(False)
 
-    def set_hybrid_begin_question(self, value: int) -> None:
+    def populate_hybrid_begin_question_combo(self, combo: QComboBox | None) -> None:
+        if combo is None:
+            return
+        current_offset = self.hybrid_begin_question_offset
+        combo.blockSignals(True)
+        combo.clear()
+        if not self.questions:
+            combo.addItem("-", 0)
+            combo.setEnabled(False)
+        else:
+            combo.setEnabled(True)
+            for offset, question in enumerate(self.questions):
+                label = str(question.get("label") or offset + 1)
+                combo.addItem(label, offset)
+            current_offset = max(0, min(current_offset, len(self.questions) - 1))
+            index = combo.findData(current_offset)
+            combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.blockSignals(False)
+
+    def hybrid_begin_question_changed(self, _index: int | None = None) -> None:
+        combo = self.sender()
+        if not isinstance(combo, QComboBox):
+            combo = self.hybrid_begin_question
+        offset = combo.currentData()
+        try:
+            self.set_hybrid_begin_question_offset(int(offset))
+        except (TypeError, ValueError):
+            self.set_hybrid_begin_question_offset(0)
+
+    def set_hybrid_begin_question_offset(self, offset: int) -> None:
         maximum = max(1, len(self.questions))
-        value = max(1, min(int(value), maximum))
-        for spin_box in (self.hybrid_begin_question, self._large_hybrid_begin_question):
-            if spin_box is None or spin_box.value() == value:
+        offset = max(0, min(int(offset), maximum - 1))
+        self.hybrid_begin_question_offset = offset
+        for combo in (self.hybrid_begin_question, self._large_hybrid_begin_question):
+            if combo is None:
                 continue
-            spin_box.blockSignals(True)
-            spin_box.setValue(value)
-            spin_box.blockSignals(False)
+            index = combo.findData(offset)
+            if index < 0 or combo.currentIndex() == index:
+                continue
+            combo.blockSignals(True)
+            combo.setCurrentIndex(index)
+            combo.blockSignals(False)
+
+    def current_hybrid_begin_question_offset(self) -> int:
+        if not self.questions:
+            return 0
+        return max(0, min(self.hybrid_begin_question_offset, len(self.questions) - 1))
 
     def open_large_input_dialog(self) -> None:
         if self.test.currentData() is None or not self.score_panel.isVisible():
@@ -1030,16 +1067,15 @@ class ResultsPage(Page):
         large_vertical_direction.setMinimumWidth(120)
         large_vertical_direction.setMaximumWidth(150)
         self._large_vertical_direction = large_vertical_direction
-        large_hybrid_begin_question = QSpinBox()
-        large_hybrid_begin_question.setRange(1, max(1, len(self.questions)))
-        large_hybrid_begin_question.setValue(self.hybrid_begin_question.value())
+        large_hybrid_begin_question = QComboBox()
         large_hybrid_begin_question.setMinimumWidth(105)
-        large_hybrid_begin_question.setMaximumWidth(135)
+        large_hybrid_begin_question.setMaximumWidth(150)
         self._large_hybrid_begin_question = large_hybrid_begin_question
+        self.populate_hybrid_begin_question_combo(large_hybrid_begin_question)
         large_horizontal_block_size = QSpinBox()
         large_horizontal_block_size.setRange(1, 99)
         large_horizontal_block_size.setValue(self.horizontal_block_size.value())
-        large_horizontal_block_size.setSuffix(" vragen")
+        large_horizontal_block_size.setSuffix(" kolommen")
         large_horizontal_block_size.setMinimumWidth(120)
         large_horizontal_block_size.setMaximumWidth(160)
         self._large_horizontal_block_size = large_horizontal_block_size
@@ -1065,8 +1101,12 @@ class ResultsPage(Page):
         def sync_large_horizontal_block_size(value: int) -> None:
             self.set_horizontal_block_size(value)
 
-        def sync_large_hybrid_begin_question(value: int) -> None:
-            self.set_hybrid_begin_question(value)
+        def sync_large_hybrid_begin_question(_index: int) -> None:
+            offset = large_hybrid_begin_question.currentData()
+            try:
+                self.set_hybrid_begin_question_offset(int(offset))
+            except (TypeError, ValueError):
+                self.set_hybrid_begin_question_offset(0)
 
         large_direction.currentIndexChanged.connect(sync_large_direction)
         header_row.addWidget(make_filter_field("Invoerrichting", large_direction))
@@ -1076,7 +1116,7 @@ class ResultsPage(Page):
         header_row.addWidget(large_vertical_field)
         large_begin_field = make_filter_field("Beginvraag", large_hybrid_begin_question)
         large_begin_field.setVisible(large_direction.currentData() == "hybrid")
-        large_hybrid_begin_question.valueChanged.connect(sync_large_hybrid_begin_question)
+        large_hybrid_begin_question.currentIndexChanged.connect(sync_large_hybrid_begin_question)
         header_row.addWidget(large_begin_field)
         large_horizontal_block_field = make_filter_field("Aantal horizontaal", large_horizontal_block_size)
         large_horizontal_block_field.setVisible(large_direction.currentData() == "hybrid")
@@ -1274,15 +1314,15 @@ class ResultsPage(Page):
         self.set_save_state("saved")
 
     def update_hybrid_question_ranges(self) -> None:
-        maximum = max(1, len(self.questions))
-        for spin_box in (self.hybrid_begin_question, self._large_hybrid_begin_question):
-            if spin_box is None:
-                continue
-            spin_box.blockSignals(True)
-            spin_box.setRange(1, maximum)
-            if spin_box.value() > maximum:
-                spin_box.setValue(maximum)
-            spin_box.blockSignals(False)
+        if not self.questions:
+            self.hybrid_begin_question_offset = 0
+        else:
+            self.hybrid_begin_question_offset = max(
+                0,
+                min(self.hybrid_begin_question_offset, len(self.questions) - 1),
+            )
+        self.populate_hybrid_begin_question_combo(self.hybrid_begin_question)
+        self.populate_hybrid_begin_question_combo(self._large_hybrid_begin_question)
 
     @staticmethod
     def question_tooltip(question: dict) -> str:
@@ -1583,12 +1623,12 @@ class ResultsPage(Page):
         direction = self.direction.currentData()
         vertical_direction = str(self.vertical_direction.currentData() or "down")
         block_size = max(1, int(self.horizontal_block_size.value()))
-        begin_column = min(last, first + max(0, int(self.hybrid_begin_question.value()) - 1))
+        begin_column = min(last, first + self.current_hybrid_begin_question_offset())
         next_row, next_column = row, column
 
         def move_hybrid_begin_to_column(target_column: int) -> int:
             target_column = max(first, min(target_column, last))
-            self.set_hybrid_begin_question(target_column - first + 1)
+            self.set_hybrid_begin_question_offset(target_column - first)
             return target_column
 
         for _ in range(max(1, row_count * len(self.questions))):
