@@ -1,5 +1,5 @@
 {
-  "release_notes": "Update 0.3.4 is een herstelupdate voor het updateproces. De vorige 0.3.3-update kon in een geïnstalleerde versie downloaden en afsluiten zonder de echte executable bij te werken. Deze versie gebruikt weer een volledig app-updatepakket, past het zware uitpakken buiten de draaiende app toe en neemt alle wijzigingen uit 0.3.3 mee.",
+  "release_notes": "Update 0.3.5 is een kleine patch voor de gecombineerde resultateninvoer. Bij het afronden van een blok schuift 'Beginvraag' nu automatisch mee naar het volgende blok, zodat duidelijk zichtbaar blijft welk vragenset u aan het invoeren bent.",
   "download_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v{version}",
   "installer_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-{version}-windows-installer.exe",
   "package_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-update-{version}.zip",
@@ -8,21 +8,11 @@
     {
       "version": "{version}",
       "type": "patch",
-      "title": "Herstelupdate voor geïnstalleerde app",
+      "title": "Beginvraag schuift mee bij gecombineerde invoer",
       "changes": [
-        "Het updatepakket bevat nu weer de volledige geïnstalleerde appbestanden, waaronder ToetsVizier.exe en de interne programmamap.",
-        "Installaties die de eerdere lichte 0.3.3-update al hadden gedownload, krijgen met 0.3.4 opnieuw een update aangeboden.",
-        "De updatewizard sluit ToetsVizier eerst af en pakt het grote updatepakket daarna buiten de app uit, zodat Windows minder snel 'reageert niet' toont.",
-        "Het grote invoerscherm voor resultaten kan weer normaal worden gemaximaliseerd en als fullscreen-werkruimte worden gebruikt.",
-        "Het toetsenmenu heeft filteropties voor zoeken, periode, toetssoort, niveau, jaarlaag en gewone toets/herkansing.",
-        "Vanuit het toetsenmenu kunt u nu direct doorgaan naar het vragenoverzicht, resultateninvoer, normering of toetsanalyse van de geselecteerde toets.",
-        "Het vragenoverzicht toont bij meerkeuzevragen de antwoordsleutel, zodat u direct ziet welk antwoord hoort bij een vraag.",
-        "Resultateninvoer heeft een nieuwe invoerrichting 'Gecombineerd': u voert een blokje vragen horizontaal in en springt daarna automatisch naar de volgende leerling.",
-        "Bij gecombineerde invoer kiest u zelf de beginvraag, het aantal vragen per blok en de richting omhoog/omlaag.",
-        "De gecombineerde invoer werkt ook in het vergrote invoervenster.",
-        "Na het afronden van een blok bij alle leerlingen gaat ToetsVizier automatisch door naar het volgende blok en keert de invoerrichting om.",
-        "De invoerhulp legt de nieuwe gecombineerde invoermodus uit.",
-        "De cumulatieve frequentiegrafiek in de toetsanalyse blijft beter binnen de kaart en snijdt minder snel tekst of assen af."
+        "Bij gecombineerde score-invoer schuift 'Beginvraag' automatisch door naar de eerste vraag van het volgende blok.",
+        "Dit werkt zowel wanneer de invoerrichting omlaag als omhoog wisselt.",
+        "De uitleg in resultateninvoer benoemt nu dat Beginvraag automatisch meeloopt."
       ]
     }
   ]

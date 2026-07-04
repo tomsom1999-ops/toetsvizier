@@ -710,7 +710,8 @@ class ResultsPage(Page):
         self.input_guide = QLabel(
             "Sneltoetsen: N = vraag niet gemaakt | Delete/Backspace = score wissen | "
             "cijfers/letters = invoeren | Enter/pijltjes = navigeren. "
-            "Invoerrichting: horizontaal = per leerling, verticaal = per vraag, gecombineerd = vanaf Beginvraag blokjes vragen per leerling. "
+            "Invoerrichting: horizontaal = per leerling, verticaal = per vraag, gecombineerd = vanaf Beginvraag blokjes vragen per leerling; "
+            "Beginvraag schuift automatisch mee naar het volgende blok. "
             "Kleuren: blauwe totaalscore = rij compleet | oranje N = vraag niet gemaakt | "
             "groen/rood = meerkeuze goed/fout."
         )
@@ -777,7 +778,7 @@ class ResultsPage(Page):
                     "title": "Scores handmatig invoeren",
                     "text": "U kunt invoeren per leerling, per vraag of gecombineerd. Bij gecombineerd vult u eerst een aantal vragen horizontaal in en springt daarna naar de volgende leerling.",
                     "action": "Kies de invoerrichting die bij uw nakijkwerk past en typ de scores in de cellen. Met Delete wist u een score.",
-                    "tip": "Bij gecombineerd kiest u ook Beginvraag, omhoog/omlaag en hoeveel vragen per leerling horizontaal worden ingevuld.",
+                    "tip": "Bij gecombineerd kiest u Beginvraag en het aantal vragen per blok. Zodra een blok klaar is, schuift Beginvraag automatisch door naar het volgende blok.",
                 },
                 {
                     "title": "Groot invoerscherm gebruiken",
@@ -1584,6 +1585,12 @@ class ResultsPage(Page):
         block_size = max(1, int(self.horizontal_block_size.value()))
         begin_column = min(last, first + max(0, int(self.hybrid_begin_question.value()) - 1))
         next_row, next_column = row, column
+
+        def move_hybrid_begin_to_column(target_column: int) -> int:
+            target_column = max(first, min(target_column, last))
+            self.set_hybrid_begin_question(target_column - first + 1)
+            return target_column
+
         for _ in range(max(1, row_count * len(self.questions))):
             if direction == "vertical":
                 if vertical_direction == "up":
@@ -1617,6 +1624,7 @@ class ResultsPage(Page):
                         next_column = block_end + 1
                         if next_column > last:
                             return
+                        begin_column = move_hybrid_begin_to_column(next_column)
                         next_row = 0
                         vertical_direction = "down"
                         self.set_vertical_entry_direction(vertical_direction)
@@ -1627,6 +1635,7 @@ class ResultsPage(Page):
                         next_column = block_end + 1
                         if next_column > last:
                             return
+                        begin_column = move_hybrid_begin_to_column(next_column)
                         next_row = row_count - 1
                         vertical_direction = "up"
                         self.set_vertical_entry_direction(vertical_direction)
