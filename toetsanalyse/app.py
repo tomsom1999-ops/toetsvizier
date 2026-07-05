@@ -4486,6 +4486,14 @@ class NormingBridge(QObject):
         super().__init__(page)
         self.page = page
 
+    @Slot(str)
+    def logDashboardError(self, payload_json: str) -> None:
+        try:
+            payload = json.loads(payload_json)
+        except Exception:
+            payload = {"raw": payload_json}
+        configure_logging().warning("Dashboardrenderfout normering: %s", payload)
+
     @Slot(str, result=str)
     def finalizeNormalization(self, settings_json: str) -> str:
         test_id = self.page.test.currentData()

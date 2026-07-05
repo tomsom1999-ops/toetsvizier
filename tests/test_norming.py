@@ -5,6 +5,7 @@ from pathlib import Path
 from toetsanalyse.database import SubjectDatabase
 from toetsanalyse.norming import (
     calculate_grade,
+    curve_points,
     dashboard_data,
     default_settings,
     has_active_normalization,
@@ -90,8 +91,22 @@ class NormingTests(unittest.TestCase):
         settings.update({"method": "cesuur", "pass_score": 12.0})
 
         self.assertEqual(1.0, calculate_grade(0, 20, settings))
+        self.assertEqual(3.3, calculate_grade(6, 20, settings))
         self.assertEqual(5.5, calculate_grade(12, 20, settings))
         self.assertEqual(10.0, calculate_grade(20, 20, settings))
+
+    def test_backend_curve_points_use_same_grade_function_as_saved_grades(self) -> None:
+        settings = default_settings(20)
+        settings.update({"method": "cesuur", "pass_score": 12.0})
+
+        curve = curve_points(20, settings, steps=4)
+        grades_by_score = {point["score"]: point["grade"] for point in curve["current"]}
+
+        self.assertEqual(1.0, grades_by_score[0.0])
+        self.assertEqual(5.5, grades_by_score[12.0])
+        self.assertEqual(10.0, grades_by_score[20.0])
+        self.assertEqual(12.0, curve["configured_pass_score"])
+        self.assertEqual(12.0, curve["sufficient_score"])
 
     def test_cito_cvte_method_accepts_grensscore_and_applies_official_rounding(self) -> None:
         settings = default_settings(20)
@@ -206,6 +221,11 @@ class NormingTests(unittest.TestCase):
         self.assertIn("Excel exporteren", html)
         self.assertIn("PDF exporteren", html)
         self.assertIn("fixedrange:true", html)
+        self.assertIn("backendCurve", html)
+        self.assertIn("safePlotlyReact", html)
+        self.assertIn("chartError", html)
+        self.assertIn("chart-error", html)
+        self.assertIn("curve", data)
         self.assertIn('data-expand="curve"', html)
         self.assertIn('data-expand="scatter"', html)
         self.assertIn('data-expand="histogram"', html)

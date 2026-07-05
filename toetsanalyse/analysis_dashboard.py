@@ -166,6 +166,13 @@ td.num {{ font-variant-numeric:tabular-nums; }}
 .chart .js-plotly-plot,
 .chart .plot-container,
 .chart .svg-container {{ max-width:100% !important; overflow:hidden !important; }}
+.fallback-chart {{ height:238px; display:flex; flex-direction:column; justify-content:center; gap:8px; padding:8px 0; }}
+.fallback-row {{ display:grid; grid-template-columns:minmax(80px,150px) minmax(90px,1fr) 44px; gap:8px; align-items:center; font-size:11px; color:var(--muted); }}
+.fallback-label {{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--navy); }}
+.fallback-track {{ height:11px; border-radius:999px; background:#edf1f7; overflow:hidden; }}
+.fallback-fill {{ height:100%; border-radius:999px; }}
+.fallback-value {{ text-align:right; font-weight:700; color:var(--navy); font-variant-numeric:tabular-nums; }}
+.plotly-warning {{ height:238px; display:flex; flex-direction:column; justify-content:center; gap:8px; color:var(--muted); text-align:center; }}
 .chart-note {{ margin-top:5px; border:1px solid #e4e9fa; background:#f8f9ff; padding:9px 11px; border-radius:8px; color:#52627e; font-size:12px; }}
 .resit-card {{ margin-bottom:10px; }}
 .resit-summary {{ display:grid; grid-template-columns:repeat(4,minmax(120px,1fr)); gap:8px; }}
@@ -390,12 +397,78 @@ function badge(status) {{ return `<span class="badge ${{status.level}}" title="$
 function metricChip(value, status) {{
   return `<span class="metric-chip ${{status.level}}" title="${{esc(statusTitle(status))}}">${{qualityValue(value)}}</span>`;
 }}
+function resizeVisibleCharts(viewId) {{
+  if (!window.Plotly) return;
+  document.querySelectorAll(`#${{viewId}} .js-plotly-plot`).forEach(chart => {{
+    try {{ Plotly.Plots.resize(chart); }} catch (error) {{}}
+  }});
+}}
+function logDashboardError(chart, error) {{
+  const payload = {{
+    screen: "toetsanalyse",
+    test_id: data.test && data.test.id,
+    chart: chart,
+    message: String(error && error.message ? error.message : error || "Onbekende grafiekfout")
+  }};
+  console.error("ToetsVizier grafiekfout", payload);
+  if (analysisBridge && typeof analysisBridge.logDashboardError === "function") analysisBridge.logDashboardError(JSON.stringify(payload));
+}}
+function showChartError(id, title, error) {{
+  const target = document.getElementById(id);
+  if (target) {{
+    target.innerHTML = `<div class="plotly-warning"><strong>Grafiek niet beschikbaar</strong><span>De grafiek "${{esc(title)}}" kon niet worden getoond. De onderliggende analysegegevens blijven beschikbaar.</span></div>`;
+  }}
+  logDashboardError(title, error);
+}}
+function safePlotlyReact(id, traces, layout, config, title, fallback=null) {{
+  const target = document.getElementById(id);
+  if (!target) return;
+  if (!window.Plotly) {{
+    if (fallback) fallback();
+    else showChartError(id, title, "Plotly niet geladen");
+    return;
+  }}
+  try {{
+    Plotly.react(id, traces, layout, config).then(() => {{
+      try {{ Plotly.Plots.resize(target); }} catch (resizeError) {{}}
+    }}).catch(error => {{
+      if (fallback) {{
+        logDashboardError(title, error);
+        fallback();
+      }} else {{
+        showChartError(id, title, error);
+      }}
+    }});
+  }} catch (error) {{
+    if (fallback) {{
+      logDashboardError(title, error);
+      fallback();
+    }} else {{
+      showChartError(id, title, error);
+    }}
+  }}
+}}
+function renderVisibleView(name) {{
+  if (name === "group") {{
+    renderGroupCharts();
+    resizeVisibleCharts("group");
+    setTimeout(() => resizeVisibleCharts("group"), 120);
+  }}
+  if (name === "student") {{
+    renderStudent();
+    resizeVisibleCharts("student");
+    setTimeout(() => resizeVisibleCharts("student"), 120);
+  }}
+  if (name === "comparison") {{
+    renderComparison();
+    resizeVisibleCharts("comparison");
+    setTimeout(() => resizeVisibleCharts("comparison"), 120);
+  }}
+}}
 function activate(name) {{
   document.querySelectorAll(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.tab === name));
   document.querySelectorAll(".view").forEach(view => view.classList.toggle("active", view.id === name));
-  if (name === "group") renderGroupCharts();
-  if (name === "student") renderStudent();
-  if (name === "comparison") renderComparison();
+  requestAnimationFrame(() => renderVisibleView(name));
 }}
 document.querySelectorAll(".tab").forEach(button => button.addEventListener("click", () => activate(button.dataset.tab)));
 document.getElementById("title").textContent = "Toetsanalyse - " + data.test.name;
@@ -584,12 +657,16 @@ function renderGeneral() {{
   const line = item => `<div class="question-line"><span>Vraag ${{esc(item.label)}}</span><strong>${{qualityValue(item.p_value)}}</strong></div>`;
   document.getElementById("easyItems").innerHTML = data.easy_items.map(line).join("");
   document.getElementById("difficultItems").innerHTML = data.difficult_items.map(line).join("");
-  if (window.Plotly) {{
-    const scoreBin = Math.max(1, Math.ceil(Number(data.maximum_score || 1) / 12));
-    const scoreMaximum = Math.max(1, Number(data.maximum_score || 0));
-    const distribution = scoreDistribution(data.participants.map(p => p.total_score), scoreMaximum, scoreBin);
-    Plotly.react("generalScores", [{{x:distribution.labels, y:distribution.counts, type:"bar", marker:{{color:colors.purple}}}}], scoreBarLayout("Scorebereik"), plotConfig);
-  }}
+  const scoreBin = Math.max(1, Math.ceil(Number(data.maximum_score || 1) / 12));
+  const scoreMaximum = Math.max(1, Number(data.maximum_score || 0));
+  const distribution = scoreDistribution(data.participants.map(p => p.total_score), scoreMaximum, scoreBin);
+  safePlotlyReact(
+    "generalScores",
+    [{{x:distribution.labels, y:distribution.counts, type:"bar", marker:{{color:colors.purple}}}}],
+    scoreBarLayout("Scorebereik"),
+    plotConfig,
+    "Verdeling van scores"
+  );
 }}
 function itemAnalysisRows() {{
   const source = data.question_group_analysis || data.item_analysis || [];
@@ -662,14 +739,39 @@ function scoreBarLayout(label) {{
   layout.yaxis.title = "Aantal";
   return layout;
 }}
+function barColor(value) {{
+  return value >= 60 ? colors.green : value >= 40 ? colors.orange : colors.red;
+}}
+function fallbackDimensionChart(id, dimension) {{
+  const target = document.getElementById(id);
+  if (!target) return;
+  const entries = dimension.entries || [];
+  if (!entries.length) {{
+    target.innerHTML = '<div class="empty">Geen ingevulde classificaties voor deze toets.</div>';
+    return;
+  }}
+  target.innerHTML = `<div class="fallback-chart">${{entries.map(entry => {{
+    const value = Math.max(0, Math.min(100, Number(entry.percentage || 0)));
+    return `<div class="fallback-row" title="${{esc(entry.name)}}: ${{percentage(value)}}">
+      <div class="fallback-label">${{esc(entry.name)}}</div>
+      <div class="fallback-track"><div class="fallback-fill" style="width:${{value}}%;background:${{barColor(value)}}"></div></div>
+      <div class="fallback-value">${{percentage(value)}}</div>
+    </div>`;
+  }}).join("")}}</div>`;
+}}
 function dimensionChart(id, dimension, horizontal=false) {{
   const entries = dimension.entries || [];
   const target = document.getElementById(id);
-  if (!window.Plotly) return;
+  if (!target) return;
+  if (!window.Plotly) {{
+    logDashboardError(dimension.title || id, "Plotly niet geladen");
+    fallbackDimensionChart(id, dimension);
+    return;
+  }}
   if (!entries.length) {{ target.innerHTML = '<div class="empty">Geen ingevulde classificaties voor deze toets.</div>'; return; }}
   const names = entries.map(entry => wrapCategoryLabel(entry.name));
   const values = entries.map(entry => entry.percentage);
-  const palette = values.map(value => value >= 60 ? colors.green : value >= 40 ? colors.orange : colors.red);
+  const palette = values.map(value => barColor(value));
   const trace = horizontal ? {{x:values, y:names, type:"bar", orientation:"h", marker:{{color:palette}}, text:values.map(value=>Math.round(value)+"%"), textposition:"outside"}} : {{x:names, y:values, type:"bar", marker:{{color:palette}}, text:values.map(value=>Math.round(value)+"%"), textposition:"outside"}};
   const layout = baseLayout();
   if (horizontal) {{
@@ -680,7 +782,7 @@ function dimensionChart(id, dimension, horizontal=false) {{
     layout.yaxis = {{fixedrange:true, autorange:"reversed"}};
   }}
   else {{ layout.yaxis = {{range:[0,108], ticksuffix:"%", fixedrange:true, gridcolor:colors.grid, zeroline:false}}; }}
-  Plotly.react(id, [trace], layout, plotConfig);
+  safePlotlyReact(id, [trace], layout, plotConfig, dimension.title || id, () => fallbackDimensionChart(id, dimension));
 }}
 function gradeBands(grades) {{
   const bands = [
@@ -835,7 +937,7 @@ function rankText(cell, fallbackIndex) {{
 }}
 function renderHeatmap(targetId, selectId, anonymous, selectedStudentId=null, groupReport=false) {{
   const target = document.getElementById(targetId);
-  if (!target || !window.Plotly) return;
+  if (!target) return;
   const options = heatmapOptions(groupReport);
   const selection = document.getElementById(selectId);
   const option = options.find(candidate => candidate.key === (selection ? selection.value : "")) || options[0];
@@ -874,7 +976,7 @@ function renderHeatmap(targetId, selectId, anonymous, selectedStudentId=null, gr
   }}) : [];
   const chartHeight = Math.min(760, Math.max(285, positions.length * 25 + 92));
   target.style.height = String(chartHeight) + "px";
-  Plotly.react(targetId, [{{
+  safePlotlyReact(targetId, [{{
     x:option.columns.map((_, index) => index),
     y:positions.map((_, index) => index),
     z:values,
@@ -903,7 +1005,7 @@ function renderHeatmap(targetId, selectId, anonymous, selectedStudentId=null, gr
       y0:cell.rowIndex - .5, y1:cell.rowIndex + .5,
       line:{{color:"#f04491", width:4}}
     }}))
-  }}, plotConfig);
+  }}, plotConfig, option.title || "Heatmap");
 }}
 function renderGroupCharts() {{
   renderScopeBanners();
@@ -946,11 +1048,11 @@ function renderGroupCharts() {{
   }}
   renderGroupDimensionCards();
   renderHeatmap("groupHeatmap", "groupHeatmapSelect", false, null, true);
-  if (window.Plotly && gradesVisible) {{
+  if (gradesVisible) {{
     if (data.subtest_context) return;
     const grades = data.participants.map(p => Number(p.grade)).filter(value => !Number.isNaN(value));
     const bands = gradeBands(grades);
-    Plotly.react("groupGrades", [{{
+    safePlotlyReact("groupGrades", [{{
       values: bands.map(b => b.count),
       labels: bands.map(b => b.label),
       type:"pie",
@@ -958,7 +1060,7 @@ function renderGroupCharts() {{
       marker: {{colors: bands.map(b => b.color)}},
       textinfo:"none",
       sort:false
-    }}], Object.assign(baseLayout(), {{showlegend:false, margin:{{l:12,r:12,t:8,b:8}}}}), plotConfig);
+    }}], Object.assign(baseLayout(), {{showlegend:false, margin:{{l:12,r:12,t:8,b:8}}}}), plotConfig, "Verdeling cijfers");
     const legend = document.getElementById("groupGradesLegend");
     if (legend) {{
       legend.innerHTML = bands.map(band => `<div class="question-line"><span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${{band.color}};margin-right:7px;"></span>${{band.label}}</span><strong>${{band.count}} leerlingen (${{band.percentage}}%)</strong></div>`).join("");
@@ -968,7 +1070,7 @@ function renderGroupCharts() {{
       const count = grades.filter(value => value <= grade).length;
       cumulative.push({{grade, percentage: grades.length ? (count / grades.length) * 100 : 0}});
     }}
-    Plotly.react("groupCumulative", [{{
+    safePlotlyReact("groupCumulative", [{{
       x: cumulative.map(point => point.grade),
       y: cumulative.map(point => point.percentage),
       type:"scatter",
@@ -980,7 +1082,7 @@ function renderGroupCharts() {{
       margin:{{l:48,r:18,t:8,b:42}},
       xaxis: {{title:"Cijfergrens", dtick:1, range:[0.9,10.1], fixedrange:true, gridcolor:colors.grid}},
       yaxis: {{title:"Cumulatief %", range:[0,100], ticksuffix:"%", fixedrange:true, gridcolor:colors.grid, zeroline:false, automargin:true}}
-    }}), plotConfig);
+    }}), plotConfig, "Cumulatieve frequentie");
   }}
   const attention = data.item_analysis.filter(item => item.status.level !== "good").slice(0, 8);
   document.getElementById("attentionItems").innerHTML = attention.length ? attention.map(item => `<div class="question-line"><span>Vraag ${{esc(item.label)}}</span>${{badge(item.status)}}</div>`).join("") : '<div class="callout good">Geen opvallende items op basis van P-waarde en Rir.</div>';
@@ -1005,12 +1107,11 @@ function renderComparison() {{
       <div class="note">${{esc(card.note)}}</div>
     </div>
   `).join("")}}</div>`;
-  if (window.Plotly) {{
-    Plotly.react("comparisonChart", [{{
+  safePlotlyReact("comparisonChart", [{{
       x:["Deeltoets","Totaaltoets"],
       y:[Number(context.mean_percentage || 0), Number(context.total_mean_percentage || 0)],
       type:"bar",
-      marker:{{color:[colors.primary, colors.blue]}},
+      marker:{{color:[colors.purple, colors.blue]}},
       text:[percentage(context.mean_percentage), percentage(context.total_mean_percentage)],
       textposition:"auto",
       hovertemplate:"%{{x}}<br>% van de punten: %{{y:.0f}}%<extra></extra>"
@@ -1023,19 +1124,14 @@ function renderComparison() {{
       showlegend:false,
       xaxis:{{fixedrange:true, gridcolor:"transparent"}},
       yaxis:{{fixedrange:true, range:[0,100], ticksuffix:"%", gridcolor:colors.grid, zeroline:false}}
-    }}, plotConfig);
-  }} else {{
-    const chart = document.getElementById("comparisonChart");
-    if (chart) chart.innerHTML = '<div class="empty">Grafiekweergave is niet beschikbaar.</div>';
-  }}
+    }}, plotConfig, "Vergelijking deeltoets en totaaltoets");
 }}
 function studentBarProfileChart(id, entries, studentName, categoryPrefix) {{
-  if (!window.Plotly) return;
   const target = document.getElementById(id);
   if (!entries.length) {{ target.innerHTML = '<div class="empty">Geen profielgegevens beschikbaar.</div>'; return; }}
   const labels = entries.map(entry => wrapCategoryLabel(categoryPrefix + ": " + entry.name, 22));
   const longestLabel = labels.reduce((length, label) => Math.max(length, String(label).replaceAll("<br>", " ").length), 0);
-  Plotly.react(id, [
+  safePlotlyReact(id, [
     {{
       x:entries.map(entry => entry.percentage), y:labels, type:"bar", orientation:"h",
       name:studentName, marker:{{color:colors.purple}},
@@ -1056,7 +1152,7 @@ function studentBarProfileChart(id, entries, studentName, categoryPrefix) {{
     showlegend:true, legend:{{orientation:"h", x:0, y:-.22}},
     xaxis:{{range:[0,108], ticksuffix:"%", fixedrange:true, gridcolor:colors.grid}},
     yaxis:{{fixedrange:true, autorange:"reversed", gridcolor:"transparent"}}
-  }}, plotConfig);
+  }}, plotConfig, categoryPrefix + "-profiel");
 }}
 function renderStudentProfiles(student) {{
   const dimensions = data.student_dimensions || [];

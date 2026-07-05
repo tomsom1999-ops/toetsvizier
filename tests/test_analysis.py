@@ -395,6 +395,11 @@ class SingleTestAnalysisTests(unittest.TestCase):
         self.assertIn("PDF genereren voor alle leerlingen", html)
         self.assertIn("analysisBridge", html)
         self.assertIn("exportStudentReports", html)
+        self.assertIn("safePlotlyReact", html)
+        self.assertIn("showChartError", html)
+        self.assertIn("logDashboardError", html)
+        self.assertIn("fallbackDimensionChart", html)
+        self.assertIn("Grafiek niet beschikbaar", html)
         self.assertNotIn("vorige toets", html.lower())
         self.assertNotIn("ontwikkeling", html.lower())
 

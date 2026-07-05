@@ -41,6 +41,7 @@ from .pdf_export import PdfExportError, export_html_to_pdf
 from .matrix_page import analysis_parts_enabled
 from .student_reports import build_student_report_html
 from .student_report_wizard import StudentReportWizardDialog
+from .logging_setup import configure_logging
 from .ui_helpers import DashboardZoomBar, compact_action_button, make_page_header, make_responsive_filter_card, set_button_role, slug
 
 
@@ -56,6 +57,14 @@ class AnalysisBridge(QObject):
     def __init__(self, page: "AnalysisPage") -> None:
         super().__init__(page)
         self.page = page
+
+    @Slot(str)
+    def logDashboardError(self, payload_json: str) -> None:
+        try:
+            payload = json.loads(payload_json)
+        except Exception:
+            payload = {"raw": payload_json}
+        configure_logging().warning("Dashboardrenderfout toetsanalyse: %s", payload)
 
     @Slot(str, str, result=str)
     def exportStudentReports(self, scope: str, selected_student_id: str) -> str:

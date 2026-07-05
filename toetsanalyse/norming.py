@@ -155,7 +155,10 @@ def unrounded_grade(score: float, maximum: float, settings: dict[str, object]) -
     elif method == "n_term":
         result = _official_n_term_grade(score, maximum, float(settings.get("n_term", 1.0)))
     elif method == "cesuur":
-        result = 10.0 - (maximum - score) * (4.5 / max(0.1, maximum - pass_score))
+        if score <= pass_score:
+            result = 1.0 + 4.5 * score / pass_score
+        else:
+            result = 5.5 + 4.5 * (score - pass_score) / max(0.1, maximum - pass_score)
     elif method == "cesuur_knik":
         if score <= pass_score:
             result = 1.0 + 4.5 * score / pass_score
@@ -202,6 +205,64 @@ def sufficient_score(maximum: float, settings: dict[str, object]) -> float | Non
         if calculate_grade(score, maximum, settings) >= 5.5:
             return score
     return None
+
+
+def _configured_pass_score(maximum: float, settings: dict[str, object]) -> float | None:
+    if maximum <= 0:
+        return None
+    method = str(settings.get("method", "n_term"))
+    if method == "percentage_voldoende":
+        return max(0.0, min(maximum, maximum * float(settings.get("pass_percentage", 55.0)) / 100))
+    if method in {"cvte_cesuur", "cesuur", "cesuur_knik"}:
+        return max(0.0, min(maximum, float(settings.get("pass_score", maximum * 0.55))))
+    return sufficient_score(maximum, settings)
+
+
+def curve_points(maximum: float, settings: dict[str, object], *, steps: int = 80) -> dict[str, object]:
+    """Return backend-calculated points for the norming curve.
+
+    Dashboards may use these points directly for the initial render and tests use
+    them as the source of truth for score-to-grade curves.
+    """
+    safe_maximum = float(maximum or 0.0)
+    if not math.isfinite(safe_maximum) or safe_maximum <= 0:
+        return {
+            "current": [{"score": 0.0, "grade": 1.0}],
+            "linear_reference": [{"score": 0.0, "grade": 1.0}],
+            "configured_pass_score": None,
+            "sufficient_score": None,
+        }
+    configuration = default_settings(safe_maximum)
+    configuration.update(settings or {})
+    safe_steps = max(2, int(steps))
+    important_scores = {0.0, safe_maximum}
+    configured_pass = _configured_pass_score(safe_maximum, configuration)
+    enough_score = sufficient_score(safe_maximum, configuration)
+    if configured_pass is not None:
+        important_scores.add(configured_pass)
+    if enough_score is not None:
+        important_scores.add(enough_score)
+    for index in range(safe_steps + 1):
+        important_scores.add(safe_maximum * index / safe_steps)
+    scores = sorted(important_scores)
+    return {
+        "current": [
+            {
+                "score": round(score, 6),
+                "grade": round(unrounded_grade(score, safe_maximum, configuration), 6),
+            }
+            for score in scores
+        ],
+        "linear_reference": [
+            {
+                "score": round(score, 6),
+                "grade": round(1.0 + 9.0 * score / safe_maximum, 6),
+            }
+            for score in scores
+        ],
+        "configured_pass_score": None if configured_pass is None else round(configured_pass, 6),
+        "sufficient_score": None if enough_score is None else round(enough_score, 6),
+    }
 
 
 def _reliability(database: SubjectDatabase, test_id: int) -> float | None:
@@ -273,12 +334,15 @@ def dashboard_data(database: SubjectDatabase, test_id: int) -> dict[str, object]
         )
         or 0
     )
+    maximum = maximum_score(database, test_id)
+    settings = load_normalization(database, test_id)
     return {
         "test": dict(test),
-        "maximum_score": maximum_score(database, test_id),
+        "maximum_score": maximum,
         "participants": participants,
         "incomplete_count": incomplete_count,
         "reliability": _reliability(database, test_id),
+        "curve": curve_points(maximum, settings),
     }
 
 

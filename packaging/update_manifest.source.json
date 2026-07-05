@@ -1,5 +1,5 @@
 {
-  "release_notes": "Update 0.3.6 verbetert de gecombineerde resultateninvoer bij toetsen met subvragen. 'Beginvraag' is nu een echte vraagkeuze, zoals 6b, en 'Aantal horizontaal' telt vanaf daar het aantal zichtbare scorekolommen.",
+  "release_notes": "Update 0.3.7 is een stabiliteits- en betrouwbaarheidsupdate. Normeringscurves gebruiken nu backend-berekeningen als bron van waarheid, dashboardgrafieken tonen duidelijke fallbackmeldingen bij renderproblemen en er is een pre-release kwaliteitscheck toegevoegd om regressies voor publicatie te voorkomen.",
   "download_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v{version}",
   "installer_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-{version}-windows-installer.exe",
   "package_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-update-{version}.zip",
@@ -8,12 +8,13 @@
     {
       "version": "{version}",
       "type": "patch",
-      "title": "Gecombineerde invoer werkt correct met subvragen",
+      "title": "Stabiliteit en betrouwbaarheid voor normering en dashboards",
       "changes": [
-        "Beginvraag is nu een keuzelijst met de echte vraaglabels uit de toets, bijvoorbeeld 6a of 6b.",
-        "Aantal horizontaal telt nu het aantal zichtbare scorekolommen vanaf de gekozen Beginvraag.",
-        "Bij het afronden van een blok schuift Beginvraag automatisch door naar het volgende vraaglabel.",
-        "Dezelfde werking is toegevoegd aan het vergrote invoerscherm."
+        "Normeringscurvepunten worden nu in Python berekend en met het dashboard meegestuurd, zodat cijferberekening en curve dezelfde basis gebruiken.",
+        "De lineaire methode is extra getest op 1,0 bij 0 punten, 5,5 op de cesuur en 10,0 bij de maximumscore.",
+        "Toetsanalyse- en normeringsgrafieken tonen voortaan een duidelijke melding als een grafiek niet geladen kan worden, in plaats van een lege kaart.",
+        "Dashboardrenderfouten worden met scherm, toets en grafieknaam in de lokale log gezet.",
+        "Er is een pre-release kwaliteitscheck toegevoegd met syntaxcheck, volledige testsuite, update-manifestcontrole en privacycontrole voor updatepakketten."
       ]
     }
   ]

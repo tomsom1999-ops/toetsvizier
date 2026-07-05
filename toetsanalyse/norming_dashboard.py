@@ -154,6 +154,10 @@ td.number {{ font-variant-numeric:tabular-nums; }}
   color:var(--muted); text-align:center;
 }}
 .offline {{ display:none; padding:12px; color:var(--red); background:var(--red-soft); border-radius:8px; margin:10px 0; }}
+.chart-error {{
+  min-height:120px; display:flex; align-items:center; justify-content:center; text-align:center;
+  border:1px dashed #d9e0ec; border-radius:10px; color:var(--muted); background:#fafbfe; padding:18px;
+}}
 .chart-modal {{
   position:fixed; inset:0; z-index:20; display:none; align-items:center; justify-content:center;
   padding:34px; background:rgba(23,36,60,.38); backdrop-filter:blur(2px);
@@ -213,7 +217,7 @@ td.number {{ font-variant-numeric:tabular-nums; }}
           <button class="method" data-method="fouten_per_punt"><strong>Fouten per punt</strong><span>Aftrek per fout</span></button>
           <button class="method" data-method="cvte_cesuur"><strong>CvTE-methode</strong><span>Via 5,5-score</span></button>
           <button class="method" data-method="n_term"><strong>N-term</strong><span>Officiele N-term</span></button>
-          <button class="method" data-method="cesuur"><strong>Lineaire methode</strong><span>Vanaf voldoende naar 10,0</span></button>
+          <button class="method" data-method="cesuur"><strong>Lineaire methode</strong><span>1,0 via 5,5 naar 10,0</span></button>
           <button class="method" data-method="cesuur_knik"><strong>Lineaire methode met knik</strong><span>Twee lineaire delen</span></button>
           <button class="method" data-method="percentage_voldoende"><strong>% van de punten gescoord voor 5,5</strong><span>Grens op percentage</span></button>
         </div>
@@ -327,6 +331,8 @@ let histogramBinSize = 4;
 const colors = {{ purple:"#6256ea", green:"#36ab61", red:"#e34646", grid:"#e6eaf2", slate:"#65728b" }};
 const chartConfig = {{displayModeBar:false, responsive:true, scrollZoom:false, doubleClick:false}};
 const chartDefinitions = {{}};
+const initialState = JSON.parse(JSON.stringify(state));
+const backendCurve = data.curve || {{}};
 let expandedChartName = null;
 let expandedChartTrigger = null;
 
@@ -335,6 +341,42 @@ if (window.qt && window.QWebChannel) {{
 }}
 function format(value, decimals=1) {{ return Number(value).toFixed(decimals).replace(".", ","); }}
 function clamp(value) {{ return Math.max(1, Math.min(10, value)); }}
+function normingStateKey(source) {{
+  return JSON.stringify({{
+    method: source.method || "n_term",
+    n_term: Number(source.n_term === undefined ? 1 : source.n_term),
+    deduction: Number(source.deduction === undefined ? .25 : source.deduction),
+    pass_score: Number(source.pass_score === undefined ? maximum * .55 : source.pass_score),
+    pass_percentage: Number(source.pass_percentage === undefined ? 55 : source.pass_percentage),
+    decimal_places: Number(source.decimal_places === undefined ? 1 : source.decimal_places),
+    rounding_method: source.rounding_method || "standaard"
+  }});
+}}
+function chartError(id, title, error) {{
+  const target = document.getElementById(id);
+  if (target) {{
+    target.innerHTML = `<div class="chart-error">De grafiek "${{title}}" kon niet worden getoond.<br>De berekeningen blijven beschikbaar in de kaarten en tabel.</div>`;
+  }}
+  const payload = {{
+    screen: "normering",
+    test_id: data.test && data.test.id,
+    chart: title,
+    message: String(error && error.message ? error.message : error || "Onbekende grafiekfout")
+  }};
+  console.error("ToetsVizier grafiekfout", payload);
+  if (bridge && typeof bridge.logDashboardError === "function") bridge.logDashboardError(JSON.stringify(payload));
+}}
+function safePlotlyReact(id, traces, layout, config, title) {{
+  if (!window.Plotly) {{
+    chartError(id, title, "Plotly niet geladen");
+    return;
+  }}
+  try {{
+    Plotly.react(id, traces, layout, config).catch(error => chartError(id, title, error));
+  }} catch (error) {{
+    chartError(id, title, error);
+  }}
+}}
 function rawGrade(score) {{
   if (!maximum) return 1;
   let pass = Math.max(.1, Math.min(maximum, Number(state.pass_score || maximum * .55)));
@@ -352,7 +394,7 @@ function rawGrade(score) {{
       grade = main;
     }}
   }}
-  if (state.method === "cesuur") grade = 10 - (maximum - score) * (4.5 / Math.max(.1, maximum - pass));
+  if (state.method === "cesuur") grade = score <= pass ? 1 + 4.5 * score / pass : 5.5 + 4.5 * (score-pass) / Math.max(.1, maximum-pass);
   if (state.method === "cesuur_knik") grade = score <= pass ? 1 + 4.5 * score / pass : 5.5 + 4.5 * (score-pass) / Math.max(.1, maximum-pass);
   if (state.method === "percentage_voldoende") grade = score <= pass ? 1 + 4.5 * score / pass : 5.5 + 4.5 * (score-pass) / Math.max(.1, maximum-pass);
   return clamp(grade);
@@ -475,7 +517,7 @@ function renderExpandedChart(name) {{
     autosize: true,
     margin: {{l:58, r:28, t:22, b:58}}
   }});
-  Plotly.react("expandedChart", definition.data, layout, chartConfig);
+  safePlotlyReact("expandedChart", definition.data, layout, chartConfig, definition.title);
 }}
 function openExpandedChart(name, trigger) {{
   expandedChartName = name;
@@ -503,7 +545,13 @@ function closeExpandedChart() {{
   if (window.Plotly) Plotly.purge("expandedChart");
 }}
 function renderPlots(rows) {{
-  if (!window.Plotly) {{ document.getElementById("plotlyUnavailable").style.display = "block"; return; }}
+  if (!window.Plotly) {{
+    document.getElementById("plotlyUnavailable").style.display = "block";
+    chartError("scatter", "Cijferverdeling", "Plotly niet geladen");
+    chartError("histogram", "Scoreverdeling", "Plotly niet geladen");
+    chartError("curve", "Normeringscurve", "Plotly niet geladen");
+    return;
+  }}
   const pass = passScore();
   const strip = compactStripPositions(rows);
   const passRows = rows.filter(row => row.sufficient);
@@ -518,16 +566,23 @@ function renderPlots(rows) {{
   const box = {{x: rows.map(()=>0), y: rows.map(row=>row.grade), type:"box", name:"Spreiding", boxpoints:false, fillcolor:"rgba(98,86,234,.035)", line:{{color:"#8390a7",width:1}}, width:.18, hoverinfo:"skip"}};
   const baseLayout = {{dragmode:false, font:{{family:"Inter, Segoe UI, sans-serif", color:"#52627e", size:12}}, paper_bgcolor:"transparent", plot_bgcolor:"transparent", margin:{{l:42,r:18,t:14,b:38}}, hovermode:"closest", showlegend:true, legend:{{orientation:"h", x:.3, y:-.1}}, yaxis:{{title:"Cijfer", range:[.8,10.3], dtick:1, gridcolor:colors.grid, zeroline:false, fixedrange:true}}, xaxis:{{showticklabels:false, range:[-strip.range,strip.range], gridcolor:"transparent", zeroline:false, fixedrange:true}}, shapes:[{{type:"line", x0:-strip.range, x1:strip.range, y0:5.5, y1:5.5, line:{{color:"#9ca9bc", dash:"dash", width:1}}}}], annotations:[{{x:strip.range*.95,y:5.5,text:"5,5",showarrow:false,bgcolor:"#fff",bordercolor:"#dfe5ef",font:{{size:11}}}}]}};
   chartDefinitions.scatter = {{title:"Cijferverdeling (per leerling)", data:[box, pointTrace(passRows, colors.green), pointTrace(failRows, colors.red)], layout:baseLayout}};
-  Plotly.react("scatter", chartDefinitions.scatter.data, chartDefinitions.scatter.layout, chartConfig);
+  safePlotlyReact("scatter", chartDefinitions.scatter.data, chartDefinitions.scatter.layout, chartConfig, chartDefinitions.scatter.title);
   const histogramEnd = Math.ceil(maximum / histogramBinSize) * histogramBinSize;
   const histLayout = {{dragmode:false, font:{{family:"Inter, Segoe UI, sans-serif", color:"#52627e", size:11}}, paper_bgcolor:"transparent", plot_bgcolor:"transparent", margin:{{l:36,r:8,t:12,b:42}}, bargap:.08, showlegend:false, xaxis:{{title:"Score (punten)", range:[0,histogramEnd], tick0:0, dtick:histogramBinSize, gridcolor:"transparent", fixedrange:true}}, yaxis:{{title:"Aantal", gridcolor:colors.grid, zeroline:false, fixedrange:true}}, shapes: pass === null ? [] : [{{type:"line", x0:pass,x1:pass,y0:0,y1:1,yref:"paper",line:{{color:colors.green,dash:"dash",width:2}}}}], annotations: pass === null ? [] : [{{x:pass,y:1,xref:"x",yref:"paper",text:"Voldoende vanaf<br>" + format(pass, pass % 1 ? 1 : 0) + " punten",showarrow:false,xanchor:"left",yanchor:"top",bgcolor:"#f0faf3",bordercolor:"#d9eee0",font:{{color:colors.green,size:10}}}}]}};
   chartDefinitions.histogram = {{title:"Scoreverdeling", data:[{{x:rows.map(row=>row.score), type:"histogram", marker:{{color:"#7165ed", line:{{color:"#fff",width:1}}}}, xbins:{{start:0,end:histogramEnd,size:histogramBinSize}}}}], layout:histLayout}};
-  Plotly.react("histogram", chartDefinitions.histogram.data, chartDefinitions.histogram.layout, chartConfig);
+  safePlotlyReact("histogram", chartDefinitions.histogram.data, chartDefinitions.histogram.layout, chartConfig, chartDefinitions.histogram.title);
   const step = maximum ? maximum / 80 : 1; const x = []; for(let value=0; value<=maximum+.001; value+=step) x.push(value); if (maximum && x[x.length-1] !== maximum) x.push(maximum);
+  const useBackendCurve = normingStateKey(state) === normingStateKey(initialState)
+    && Array.isArray(backendCurve.current) && backendCurve.current.length
+    && Array.isArray(backendCurve.linear_reference) && backendCurve.linear_reference.length;
+  const currentCurveX = useBackendCurve ? backendCurve.current.map(point => point.score) : x;
+  const currentCurveY = useBackendCurve ? backendCurve.current.map(point => point.grade) : x.map(value=>rawGrade(value));
+  const referenceCurveX = useBackendCurve ? backendCurve.linear_reference.map(point => point.score) : x;
+  const referenceCurveY = useBackendCurve ? backendCurve.linear_reference.map(point => point.grade) : x.map(value=>maximum ? 1+9*value/maximum : 1);
   const curveTick = maximum <= 20 ? 2 : maximum <= 50 ? 5 : maximum <= 100 ? 10 : 20;
   const curveLayout = {{dragmode:false, font:{{family:"Inter, Segoe UI, sans-serif", color:"#52627e",size:10}}, paper_bgcolor:"transparent",plot_bgcolor:"transparent",margin:{{l:32,r:10,t:6,b:35}},showlegend:false,xaxis:{{title:"Score",range:[0,maximum],tick0:0,dtick:curveTick,gridcolor:colors.grid,fixedrange:true}},yaxis:{{title:"Cijfer",range:[.8,10.3],dtick:2,gridcolor:colors.grid,fixedrange:true}},shapes:pass === null ? [] : [{{type:"line",x0:pass,x1:pass,y0:1,y1:10,line:{{color:"#9ca9bc",dash:"dot"}}}},{{type:"line",x0:0,x1:maximum,y0:5.5,y1:5.5,line:{{color:"#9ca9bc",dash:"dot"}}}}]}};
-  chartDefinitions.curve = {{title:"Normeringscurve", data:[{{x,y:x.map(value=>rawGrade(value)),type:"scatter",mode:"lines",line:{{color:colors.purple,width:2}}}},{{x,y:x.map(value=>maximum ? 1+9*value/maximum : 1),type:"scatter",mode:"lines",line:{{color:"#bdc8da",width:1,dash:"dash"}}}}], layout:curveLayout}};
-  Plotly.react("curve", chartDefinitions.curve.data, chartDefinitions.curve.layout, chartConfig);
+  chartDefinitions.curve = {{title:"Normeringscurve", data:[{{x:currentCurveX,y:currentCurveY,type:"scatter",mode:"lines",line:{{color:colors.purple,width:2}}}},{{x:referenceCurveX,y:referenceCurveY,type:"scatter",mode:"lines",line:{{color:"#bdc8da",width:1,dash:"dash"}}}}], layout:curveLayout}};
+  safePlotlyReact("curve", chartDefinitions.curve.data, chartDefinitions.curve.layout, chartConfig, chartDefinitions.curve.title);
   if (expandedChartName) renderExpandedChart(expandedChartName);
   window.__chartsReady = true;
 }}
