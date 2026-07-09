@@ -1,20 +1,21 @@
 {
-  "release_notes": "Update 0.3.7 is een stabiliteits- en betrouwbaarheidsupdate. Normeringscurves gebruiken nu backend-berekeningen als bron van waarheid, dashboardgrafieken tonen duidelijke fallbackmeldingen bij renderproblemen en er is een pre-release kwaliteitscheck toegevoegd om regressies voor publicatie te voorkomen.",
+  "release_notes": "Update 0.4.0 is een installer-release met de stabiliteits- en betrouwbaarheidsverbeteringen uit de laatste ontwikkelronde. Normeringscurves gebruiken nu backend-berekeningen als bron van waarheid, dashboardgrafieken tonen duidelijke fallbackmeldingen bij renderproblemen en de releasecontrole is uitgebreid om fouten voor publicatie eerder te vinden.",
   "download_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v{version}",
   "installer_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-{version}-windows-installer.exe",
   "package_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-update-{version}.zip",
-  "update_type": "package",
+  "update_type": "installer",
   "versions": [
     {
       "version": "{version}",
-      "type": "patch",
-      "title": "Stabiliteit en betrouwbaarheid voor normering en dashboards",
+      "type": "minor",
+      "title": "Installer-release met stabiliteit en betrouwbaarheid",
       "changes": [
         "Normeringscurvepunten worden nu in Python berekend en met het dashboard meegestuurd, zodat cijferberekening en curve dezelfde basis gebruiken.",
         "De lineaire methode is extra getest op 1,0 bij 0 punten, 5,5 op de cesuur en 10,0 bij de maximumscore.",
         "Toetsanalyse- en normeringsgrafieken tonen voortaan een duidelijke melding als een grafiek niet geladen kan worden, in plaats van een lege kaart.",
         "Dashboardrenderfouten worden met scherm, toets en grafieknaam in de lokale log gezet.",
-        "Er is een pre-release kwaliteitscheck toegevoegd met syntaxcheck, volledige testsuite, update-manifestcontrole en privacycontrole voor updatepakketten."
+        "Er is een pre-release kwaliteitscheck toegevoegd met syntaxcheck, volledige testsuite, update-manifestcontrole en privacycontrole voor publicatie.",
+        "Deze versie wordt als volledige Windows-installer aangeboden, zodat gebruikers zonder bestaande updatepakketroute ook naar de nieuwste versie kunnen."
       ]
     }
   ]
