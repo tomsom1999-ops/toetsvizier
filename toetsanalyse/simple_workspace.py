@@ -158,6 +158,14 @@ class SimpleWorkspace(QWidget):
                       "Meer uitleg vindt u via Uitleg bovenaan.")
         hint.setWordWrap(True)
         layout.addWidget(hint)
+        self.error_banner = QLabel()
+        self.error_banner.setWordWrap(True)
+        self.error_banner.setStyleSheet(
+            'QLabel {background:#fff1f2; color:#9f1239; border:1px solid #e11d48; '
+            'border-radius:6px; padding:8px; font-weight:600;}'
+        )
+        self.error_banner.hide()
+        layout.addWidget(self.error_banner)
         setup_controls = WrappingLayout()
         self.question_count = QSpinBox()
         self.question_count.setRange(1, 1000)
@@ -564,6 +572,21 @@ class SimpleWorkspace(QWidget):
             message = "Alle scores zijn ingevuld. U kunt de analyse al bekijken. Cijfers en cijferafhankelijke onderdelen komen beschikbaar na het vaststellen van de normering."
         else:
             message = "Alle scores zijn ingevuld. U kunt nu normeren en analyseren."
+        if self.invalid:
+            (error_row, error_col), (_, error_text) = next(iter(self.invalid.items()))
+            if error_row == 0:
+                location = f'maximumscore van vraag {error_col}'
+            elif error_col == 0:
+                location = f'leerlingnaam op rij {error_row}'
+            else:
+                learner = self.students[error_row - 1]['display_name'] if error_row <= len(self.students) else f'rij {error_row}'
+                question = self.questions[error_col - 1]['label'] if error_col <= len(self.questions) else str(error_col)
+                location = f'{learner}, vraag {question}'
+            self.error_banner.setText(f'Fout bij {location}: {error_text} Corrigeer deze cel; daarna verdwijnt de rode rand.')
+            self.error_banner.show()
+        else:
+            self.error_banner.clear()
+            self.error_banner.hide()
         self.status.setText(message)
         self.norm_button.setToolTip(message if not ready else "Kies de normering voor deze toets.")
         self.analysis_button.setToolTip(message if not ready or partial else "Bekijk de volledige analyse van deze toets, inclusief cijfers.")
@@ -594,7 +617,10 @@ class SimpleWorkspace(QWidget):
                 if raw and raw.casefold() not in {"maximaal aantal punten", "maximum", "max. score:"}:
                     raise ValueError("Plak leerlingnamen vanaf de eerste leerlingregel onder de maximumscores.")
                 return
-            maximum = float(raw.replace(",", ".")) if raw else 0.0
+            try:
+                maximum = float(raw.replace(",", ".")) if raw else 0.0
+            except ValueError as error:
+                raise ValueError("Gebruik een getal groter dan 0, bijvoorbeeld 2 of 2,5.") from error
             import math
             if not math.isfinite(maximum) or maximum <= 0:
                 raise ValueError(f"Vul bij vraag {col} een maximumscore groter dan 0 in.")
@@ -657,6 +683,22 @@ class SimpleWorkspace(QWidget):
         self.remember(before)
         for row, col, _ in entries:
             self.invalid.pop((row, col), None)
+        # A score entered before its maximum can become valid as soon as that
+        # maximum is corrected. Save it then instead of leaving a stale red border.
+        corrected_maxima = {col for row, col, _ in entries if row == 0}
+        for (pending_row, pending_col), (pending_raw, pending_message) in list(self.invalid.items()):
+            if pending_col not in corrected_maxima or 'maximumscore' not in pending_message.casefold():
+                continue
+            retry_before = self.snapshot()
+            try:
+                with self.database.connection:
+                    self.apply_cell(pending_row, pending_col, pending_raw)
+                    recalculate_grades(self.database)
+            except (ValueError, sqlite3.Error) as error:
+                self.restore(retry_before)
+                self.invalid[pending_row, pending_col] = (pending_raw, str(error))
+            else:
+                self.invalid.pop((pending_row, pending_col), None)
         self.refresh()
         if entries and advance:
             self.advance(entries[-1][0], entries[-1][1])

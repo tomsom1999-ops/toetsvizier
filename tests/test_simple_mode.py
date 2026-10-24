@@ -294,6 +294,34 @@ class SimpleModeTests(unittest.TestCase):
         self.assertTrue(workspace.analysis_button.isEnabled())
         workspace.close()
 
+    def test_invalid_cell_shows_message_and_red_border_clears_after_correction(self):
+        self.qt()
+        from PySide6.QtCore import QSettings
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        workspace = SimpleWorkspace(
+            self.db, QSettings(str(Path(self.temp.name) / "invalid-correction.ini"), QSettings.Format.IniFormat)
+        )
+        try:
+            self.assertFalse(workspace.edit_cells([(0, 2, "geen getal")], advance=False))
+            self.assertIn((0, 2), workspace.invalid)
+            self.assertFalse(workspace.error_banner.isHidden())
+            self.assertIn('maximumscore van vraag 2', workspace.error_banner.text())
+            self.assertIn('Gebruik een getal', workspace.error_banner.text())
+            self.assertTrue(workspace.edit_cells([(0, 2, "2")], advance=False))
+            self.assertNotIn((0, 2), workspace.invalid)
+            self.assertTrue(workspace.error_banner.isHidden())
+
+            self.assertFalse(workspace.edit_cells([(1, 1, "2")], advance=False))
+            self.assertIn((1, 1), workspace.invalid)
+            self.assertTrue(workspace.edit_cells([(0, 1, "3")], advance=False))
+            self.assertNotIn((1, 1), workspace.invalid)
+            student = active_students(self.db)[0]
+            question = active_questions(self.db)[0]
+            self.assertEqual(2, stored_results(self.db, 1)[1][student['id'], question['id']])
+            self.assertTrue(workspace.error_banner.isHidden())
+        finally:
+            workspace.close()
+
     def test_metadata_categories_and_multiple_choice_survive_hidden_columns(self):
         self.qt()
         from toetsanalyse.simple_dialogs import MetadataDialog
