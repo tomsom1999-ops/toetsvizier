@@ -266,6 +266,43 @@ class SimpleModeTests(unittest.TestCase):
         finally:
             w.close()
 
+    def test_multiple_custom_distributions_can_be_added_together_and_reopened(self):
+        self.qt()
+        self.fill()
+        from toetsanalyse.simple_dialogs import MetadataDialog
+        dialog = MetadataDialog(self.db)
+        qid = active_questions(self.db)[0]['id']
+        try:
+            with patch('toetsanalyse.simple_dialogs.text_input', side_effect=['Hoofdstuk', 'H1\nH2']):
+                dialog.add_distribution()
+            dialog.combos[qid, 'Hoofdstuk'].setCurrentText('H1')
+            with patch('toetsanalyse.simple_dialogs.text_input', side_effect=['Leerdoel', 'Doel A\nDoel B']):
+                dialog.add_distribution()
+            self.assertEqual('H1', dialog.combos[qid, 'Hoofdstuk'].currentText())
+            dialog.combos[qid, 'Leerdoel'].setCurrentText('Doel B')
+            self.assertTrue(dialog.checks['Hoofdstuk'].isChecked())
+            self.assertTrue(dialog.checks['Leerdoel'].isChecked())
+            with self.db.connection:
+                dialog.apply()
+            save_as(self.db, Path(self.temp.name) / 'two-distributions.tviz')
+            reopened = open_analysis(self.db.path)
+            try:
+                saved = MetadataDialog(reopened)
+                self.assertEqual({'Hoofdstuk', 'Leerdoel'}, saved.enabled)
+                self.assertEqual('H1', saved.combos[qid, 'Hoofdstuk'].currentText())
+                self.assertEqual('Doel B', saved.combos[qid, 'Leerdoel'].currentText())
+                projected = project_active(reopened)
+                try:
+                    titles = {d['title'] for d in analysis_data(projected, 1)['group_dimensions']}
+                    self.assertTrue({'Hoofdstuk', 'Leerdoel'}.issubset(titles))
+                finally:
+                    projected.close()
+                saved.close()
+            finally:
+                reopened.close()
+        finally:
+            dialog.close()
+
     def test_dynamic_cito_import_skips_unused_rows_and_keeps_blanks(self):
         try:
             from openpyxl import Workbook
@@ -449,7 +486,11 @@ class SimpleModeTests(unittest.TestCase):
         w.show()
         self.app.processEvents()
         try:
+            self.assertFalse(w.vertical_direction.isVisible())
             w.direction.setCurrentIndex(w.direction.findData('vertical'))
+            self.assertTrue(w.vertical_direction.isVisible())
+            self.assertGreaterEqual(w.vertical_direction.findText('Omhoog'), 0)
+            self.assertGreaterEqual(w.vertical_direction.findText('Omlaag'), 0)
             w.table.setCurrentCell(2, 1)
             w.table.setFocus()
             QTest.keyClick(w.table, Qt.Key.Key_F2)
