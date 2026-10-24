@@ -5,6 +5,7 @@ from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+from .ui_helpers import set_button_role
 
 
 TOPICS = [
@@ -33,6 +34,7 @@ TOPICS = [
      "<p>Standaard gebruikt u <b>hele punten</b>. Kies Halve punten, Kwartpunten of Tiende punten als dat nodig is; "
      "voer dan bijvoorbeeld <b>1,5</b> in. U kunt nooit meer punten geven dan de maximumscore.</p>"
      "<p>Bij een ingestelde meerkeuzevraag voert u de <b>gekozen antwoordletter</b> in. "
+     "Boven de vraag staat de antwoordsleutel, bijvoorbeeld <b>Vraag 3 · Sleutel: B</b>. "
      "Na een antwoordletter of <b>N</b> springt u direct door, ook als u halve punten gebruikt. "
      "Goed meerkeuzeantwoord = groen; fout antwoord = lichtrood. Gewone punten blijven wit, ook bij nul. "
      "N is lichtoranje. De actieve leerling en vraag en een volledig ingevuld totaal zijn blauw.</p>"
@@ -65,13 +67,15 @@ TOPICS = [
      "Zonder vinkje voert u zelf punten in, ook als de vraag meerkeuze is. N blijft beschikbaar.</p>"
      "<p>Heeft u al punten ingevuld? Wis die eerst voordat u naar antwoordletters wisselt, "
      "zodat punten niet per ongeluk als antwoorden worden geïnterpreteerd.</p>"
-     "<p><b>Vragen indelen:</b> kies per vraag bijvoorbeeld RTTI, OBIT of Bloom. "
+     "<p><b>Vragen indelen:</b> vink eerst aan welke verdelingen u wilt meenemen, bijvoorbeeld RTTI, OBIT of Bloom. "
+     "Alleen aangevinkte verdelingen verschijnen als kolom en gaan mee in analyse en Excel-export. "
+     "Uitvinken bewaart eerder gekozen categorieën; opnieuw aanvinken toont ze weer. "
      "Met Eigen indeling toevoegen kiest u zelf een naam en de categorieën. "
      "Hoofdstuk, paragraaf, vraagstuk en leerdoel zijn alleen voorbeelden. "
      "U vindt deze verdelingen terug onder Groepsniveau: dat gaat over de deelnemers van uw toets.</p>", "extras"),
     ("Opslaan, exporteren en verdergaan", "<p><b>Opslaan:</b> kies de eerste keer een naam en locatie voor uw <b>.tviz-analysebestand</b>. "
      "Daarna worden geldige wijzigingen automatisch in dat bestand bewaard. Onderaan staat of alles opgeslagen is. "
-     "Rode, ongeldige invoer wordt niet bewaard: corrigeer die eerst.</p>"
+     "Invoer met een rode rand wordt niet bewaard: corrigeer die eerst.</p>"
      "<p><b>Opslaan als:</b> maak een andere kopie en werk daarin verder. "
      "<b>Exporteren naar Excel:</b> maak een Excelbestand met de zichtbare tabel en vraaginstellingen. "
      "Om later verder te werken in Toetsvizier opent u het .tviz-bestand via Analyse openen.</p>"
@@ -218,6 +222,9 @@ class InputIntroduction(QDialog):
         start = QPushButton("Naar het invoerscherm")
         start.clicked.connect(self.accept)
         for button in (self.previous, self.next_button, self.skip_button, start): navigation.addWidget(button)
+        for button in (self.previous, self.skip_button, start):
+            set_button_role(button, 'secondary')
+        set_button_role(self.next_button, 'primary')
         layout.addLayout(navigation)
         self.topic.currentIndexChanged.connect(self.show_step)
         self.show_step(0)

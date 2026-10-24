@@ -6,8 +6,9 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, 
     QTableWidget, QTableWidgetItem, QVBoxLayout)
 
 from .results import test_questions
-from .simple_model import active_questions
-from .simple_widgets import fit_table_controls, dutch_buttons, text_input
+from .simple_model import active_questions, active_taxonomies
+from .simple_widgets import fit_table_controls, dutch_buttons, text_input, WrappingLayout
+from .ui_helpers import set_button_role
 
 
 from .simple_help import InputIntroduction
@@ -70,24 +71,36 @@ class MetadataDialog(QDialog):
         self.selected = {(q["question_id"], q["definition"]): q["value"] for q in database.rows(
             "SELECT qtv.question_id,d.name AS definition,v.name AS value FROM question_taxonomy_values qtv "
             "JOIN taxonomy_definitions d ON d.id=qtv.taxonomy_id JOIN taxonomy_values v ON v.id=qtv.taxonomy_value_id")}
+        self.enabled = {row['name'] for row in active_taxonomies(database)}
+        self.checks = {}
         self.setWindowTitle("Vragen indelen — optioneel")
         self.resize(940, 600)
         layout = QVBoxLayout(self)
-        note = QLabel("RTTI, OBIT en Bloom zijn beschikbaar. U hoeft niet alle kolommen in te vullen. "
+        note = QLabel("Vink aan welke verdelingen u wilt gebruiken voor deze toets. Alleen die kolommen verschijnen hieronder "
+                      "en worden meegenomen in de analyse en Excel-export. Uitvinken bewaart uw eerdere indeling. "
+                      "RTTI, OBIT en Bloom zijn beschikbaar. "
                       "Maak ook zelf een indeling en de categorieën daarbinnen. Hoofdstuk, paragraaf, leerdoel en "
                       "vraagstuk zijn voorbeelden: u kiest zelf de naam en de inhoud.")
         note.setWordWrap(True)
         layout.addWidget(note)
+        self.choices = WrappingLayout()
+        layout.addLayout(self.choices)
+        self.empty = QLabel('Vink hierboven een verdeling aan om de vragen in te delen.')
+        self.empty.setWordWrap(True)
+        self.empty.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         actions = QHBoxLayout()
         add = QPushButton("Eigen indeling toevoegen")
+        set_button_role(add, 'secondary')
         add.clicked.connect(self.add_distribution)
         edit = QPushButton("Categorieën van eigen indeling wijzigen")
+        set_button_role(edit, 'secondary')
         edit.clicked.connect(self.edit_distribution)
         actions.addWidget(add)
         actions.addWidget(edit)
         layout.addLayout(actions)
+        layout.addWidget(self.empty, 1)
         self.table = QTableWidget()
-        layout.addWidget(self.table)
+        layout.addWidget(self.table, 1)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         dutch_buttons(buttons)
         buttons.accepted.connect(self.accept)
@@ -100,15 +113,32 @@ class MetadataDialog(QDialog):
             self.selected[qid, name] = combo.currentText() if combo.currentIndex() > 0 else ""
 
     def build(self):
-        self.table.setColumnCount(len(self.definitions) + 1)
+        names = [d['name'] for d in self.definitions]
+        if list(self.checks) != names:
+            while self.choices.count():
+                item = self.choices.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            self.checks = {}
+            for name in names:
+                check = QCheckBox(name)
+                check.setChecked(name in self.enabled)
+                check.toggled.connect(lambda checked, name=name: self.toggle_distribution(name, checked))
+                self.checks[name] = check
+                self.choices.addWidget(check)
+        definitions = [d for d in self.definitions if d['name'] in self.enabled]
+        self.table.clear()
+        self.table.setColumnCount(len(definitions) + 1)
         self.table.setRowCount(len(self.questions))
-        self.table.setHorizontalHeaderLabels(["Vraag"] + [d["name"] for d in self.definitions])
+        self.table.setHorizontalHeaderLabels(["Vraag"] + [d["name"] for d in definitions])
+        self.table.setVisible(bool(definitions))
+        self.empty.setVisible(not definitions)
         self.combos = {}
         for row, q in enumerate(self.questions):
             cell = QTableWidgetItem(q["label"])
             cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(row, 0, cell)
-            for col, definition in enumerate(self.definitions, 1):
+            for col, definition in enumerate(definitions, 1):
                 combo = QComboBox()
                 combo.addItem("Niet ingedeeld")
                 combo.addItems(definition["values"])
@@ -117,6 +147,14 @@ class MetadataDialog(QDialog):
                 self.table.setCellWidget(row, col, combo)
                 self.combos[q["id"], definition["name"]] = combo
         fit_table_controls(self.table)
+
+    def toggle_distribution(self, name, checked):
+        self.capture()
+        if checked:
+            self.enabled.add(name)
+        else:
+            self.enabled.discard(name)
+        self.build()
 
     def category_input(self, title, text=""):
         value = text_input(self, title, "Eén categorie per regel. U mag zelf namen kiezen.", text, multiline=True)
@@ -140,6 +178,7 @@ class MetadataDialog(QDialog):
         if categories:
             self.capture()
             self.definitions.append({"name": name, "standard": False, "values": categories})
+            self.enabled.add(name)
             self.build()
 
     def edit_distribution(self):
@@ -160,12 +199,15 @@ class MetadataDialog(QDialog):
     def apply(self):
         self.capture()
         connection = self.database.connection
+        connection.execute('DELETE FROM test_taxonomy_selections WHERE test_id=1')
+        self.database.set_meta('simple_taxonomy_selection_configured', '1')
         for q in self.questions:
             connection.execute("DELETE FROM question_taxonomy_values WHERE question_id=?", (q["id"],))
         for definition in self.definitions:
             connection.execute("INSERT OR IGNORE INTO taxonomy_definitions(name,is_standard) VALUES(?,?)", (definition["name"], int(definition["standard"])))
             tid = self.database.scalar("SELECT id FROM taxonomy_definitions WHERE name=?", (definition["name"],))
-            connection.execute("INSERT OR IGNORE INTO test_taxonomy_selections VALUES(1,?)", (tid,))
+            if definition['name'] in self.enabled:
+                connection.execute("INSERT OR IGNORE INTO test_taxonomy_selections VALUES(1,?)", (tid,))
             if not definition["standard"]:
                 current = self.database.rows("SELECT id,name FROM taxonomy_values WHERE taxonomy_id=?", (tid,))
                 for row in current:

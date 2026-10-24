@@ -153,6 +153,7 @@ class SimpleModeTests(unittest.TestCase):
         self.fill()
         dialog = MetadataDialog(self.db)
         dialog.definitions.append({"name": "Mijn indeling", "standard": False, "values": ["Een", "Twee"]})
+        dialog.enabled.add('Mijn indeling')
         dialog.build()
         qid = active_questions(self.db)[2]["id"]
         dialog.combos[qid, "Mijn indeling"].setCurrentText("Twee")
@@ -168,6 +169,102 @@ class SimpleModeTests(unittest.TestCase):
         self.assertEqual("A", self.db.scalar("SELECT multiple_choice_answer FROM matrix_questions WHERE id=?", (qid,)))
         dialog.close()
         visible.close()
+
+    def test_metadata_checkboxes_control_analysis_export_and_preserve_unchecked_values(self):
+        self.qt()
+        self.fill()
+        from openpyxl import load_workbook
+        from toetsanalyse.simple_dialogs import MetadataDialog
+        from toetsanalyse.simple_model import active_taxonomies
+        from toetsanalyse.simple_workspace import export_simple_excel
+        qid = active_questions(self.db)[0]['id']
+        dialog = MetadataDialog(self.db)
+        self.assertTrue({'RTTI', 'OBIT', 'Bloom'}.issubset(dialog.checks))
+        self.assertEqual(set(), dialog.enabled)
+        dialog.checks['RTTI'].setChecked(True)
+        dialog.combos[qid, 'RTTI'].setCurrentIndex(1)
+        rtti = dialog.combos[qid, 'RTTI'].currentText()
+        dialog.checks['OBIT'].setChecked(True)
+        dialog.combos[qid, 'OBIT'].setCurrentIndex(1)
+        obit = dialog.combos[qid, 'OBIT'].currentText()
+        dialog.checks['RTTI'].setChecked(False)
+        self.assertNotIn((qid, 'RTTI'), dialog.combos)
+        dialog.checks['RTTI'].setChecked(True)
+        self.assertEqual(rtti, dialog.combos[qid, 'RTTI'].currentText())
+        dialog.checks['OBIT'].setChecked(False)
+        with self.db.connection:
+            dialog.apply()
+        self.assertEqual(['RTTI'], [row['name'] for row in active_taxonomies(self.db)])
+        source_count = self.db.scalar('SELECT COUNT(*) FROM question_taxonomy_values')
+        projected = project_active(self.db)
+        try:
+            titles = {d['title'] for d in analysis_data(projected, 1)['group_dimensions']}
+            self.assertIn('RTTI', titles)
+            self.assertNotIn('OBIT', titles)
+        finally:
+            projected.close()
+        self.assertEqual(source_count, self.db.scalar('SELECT COUNT(*) FROM question_taxonomy_values'))
+        path = Path(self.temp.name) / 'selected.xlsx'
+        export_simple_excel(self.db, path)
+        workbook = load_workbook(path)
+        try:
+            header = next(workbook['Vragen en metadata'].values)
+            self.assertIn('RTTI', header)
+            self.assertNotIn('OBIT', header)
+        finally:
+            workbook.close()
+        save_as(self.db, Path(self.temp.name) / 'selected.tviz')
+        reopened = open_analysis(self.db.path)
+        try:
+            saved_dialog = MetadataDialog(reopened)
+            self.assertEqual({'RTTI'}, saved_dialog.enabled)
+            saved_dialog.checks['RTTI'].setChecked(False)
+            with reopened.connection:
+                saved_dialog.apply()
+            empty = MetadataDialog(reopened)
+            self.assertEqual(set(), empty.enabled)
+            before = reopened.connection.serialize()
+            empty.checks['OBIT'].setChecked(True)
+            self.assertEqual(obit, empty.combos[qid, 'OBIT'].currentText())
+            self.assertEqual(before, reopened.connection.serialize())
+            empty.reject()
+            self.assertEqual(before, reopened.connection.serialize())
+            saved_dialog.close()
+            empty.close()
+        finally:
+            reopened.close()
+        dialog.close()
+
+    def test_question_header_shows_mc_key_and_buttons_have_distinct_roles(self):
+        self.qt()
+        self.fill()
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QPushButton
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        qid = active_questions(self.db)[1]['id']
+        with self.db.connection:
+            self.db.connection.execute("UPDATE matrix_questions SET is_multiple_choice=1,multiple_choice_answer='B' WHERE id=?", (qid,))
+        w = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / 'buttons.ini'), QSettings.Format.IniFormat))
+        try:
+            self.assertEqual('Vraag 2\nSleutel: B', w.table.horizontalHeaderItem(2).text())
+            self.assertEqual('Vraag 1', w.table.horizontalHeaderItem(1).text())
+            self.assertGreaterEqual(w.table.horizontalHeader().height(), 54)
+            buttons = {b.text(): b for b in w.findChildren(QPushButton)}
+            for text in ['Opslaan als', 'Exporteren naar Excel', 'Uitleg', 'Sluiten', 'Vragen indelen',
+                         'Meerkeuze instellen', 'Ongedaan maken (Ctrl+Z)', 'Groot invoerscherm']:
+                self.assertEqual('secondaryButton', buttons[text].objectName())
+            self.assertEqual('primaryButton', buttons['Opslaan'].objectName())
+            self.assertEqual('dangerButton', w.remove_button.objectName())
+            w.table.setCurrentCell(0, 1)
+            self.assertFalse(w.remove_button.isEnabled())
+            w.table.setCurrentCell(1, 1)
+            self.assertTrue(w.remove_button.isEnabled())
+            with self.db.connection:
+                self.db.connection.execute("UPDATE matrix_questions SET multiple_choice_answer='C' WHERE id=?", (qid,))
+            w.refresh()
+            self.assertIn('Sleutel: C', w.table.horizontalHeaderItem(2).text())
+        finally:
+            w.close()
 
     def test_dynamic_cito_import_skips_unused_rows_and_keeps_blanks(self):
         try:
@@ -458,13 +555,19 @@ class SimpleModeTests(unittest.TestCase):
                 w.direction.setCurrentIndex(w.direction.findData('vertical'))
                 w.vertical_direction.setCurrentIndex(w.vertical_direction.findData('up'))
                 w.edit_cells([(1, 1, '1')], advance=False)
+                w.large_dialog.activateWindow()
                 table.setFocus()
+                self.app.processEvents()
+                QTest.qWait(20)
                 QTest.keyClick(table, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
                 self.app.processEvents()
                 self.assertEqual('2', table.item(1, 1).text())
                 w.table.setCurrentCell(2, 1)
                 from PySide6.QtWidgets import QApplication
                 QApplication.clipboard().setText('1')
+                w.large_dialog.activateWindow()
+                table.setFocus()
+                self.app.processEvents()
                 QTest.keyClick(table, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
                 self.app.processEvents()
                 self.assertEqual('1', table.item(2, 1).text())
@@ -629,7 +732,7 @@ class SimpleModeTests(unittest.TestCase):
             self.assertLessEqual(workspace.width(), 980)
             self.assertLessEqual(workspace.minimumSizeHint().width(), 980)
             for control in (workspace.direction, workspace.vertical_direction, workspace.begin_question,
-                            workspace.block_size, workspace.precision, workspace.undo_button):
+                            workspace.block_size, workspace.precision):
                 self.assertGreater(workspace.progress.geometry().top(), control.geometry().bottom())
             self.assertGreaterEqual(workspace.table.height(), 220)
             for button in workspace.input.findChildren(QPushButton):

@@ -10,13 +10,14 @@ from PySide6.QtGui import QColor, QKeySequence, QShortcut, QPen
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFileDialog,
     QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox,
     QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QStyledItemDelegate,
-    QAbstractItemDelegate, QScrollArea)
+    QAbstractItemDelegate, QScrollArea, QSizePolicy)
 
 from .results import save_score, stored_results, test_questions
 from .simple_model import (SIMPLE_SUFFIX, add_student, completion, invalidate_grades,
-                           recalculate_grades, save_as, set_counts, active_questions, active_students, project_active)
+                           recalculate_grades, save_as, set_counts, active_questions, active_students, active_taxonomies, project_active)
 from .simple_dialogs import InputIntroduction, MetadataDialog, MultipleChoiceDialog
 from .simple_widgets import WrappingLayout, question
+from .ui_helpers import set_button_role
 
 
 class InputScrollArea(QScrollArea):
@@ -102,6 +103,7 @@ class SimpleWorkspace(QWidget):
 
     def __init__(self, database, settings, parent=None):
         super().__init__(parent)
+        self.setStyleSheet('QPushButton:disabled {background:#edf2f7; color:#8793a5; border:1px solid #e0e6ef;}')
         self.database, self.settings = database, settings
         self.history = []
         self.invalid = {}
@@ -124,6 +126,7 @@ class SimpleWorkspace(QWidget):
                               ("Exporteren naar Excel", self.export_excel), ("Uitleg", lambda: self.show_intro(True)),
                               ("Sluiten", self.request_close)):
             button = QPushButton(label)
+            set_button_role(button, 'primary' if label == 'Opslaan' else 'secondary')
             button.clicked.connect(lambda _=False, fn=method: fn())
             top.addWidget(button)
         root.addLayout(top)
@@ -135,7 +138,7 @@ class SimpleWorkspace(QWidget):
         self.analysis_button = QPushButton("3. Analyseren")
         self.analysis_button.clicked.connect(lambda: self.open_module("analysis"))
         for button in (self.input_button, self.norm_button, self.analysis_button):
-            steps.addWidget(button)
+            steps.addWidget(button, 1)
         root.addLayout(steps)
         self.status = QLabel()
         self.status.setWordWrap(True)
@@ -170,10 +173,19 @@ class SimpleWorkspace(QWidget):
         count_hint = QLabel("Lager aantal? Extra gegevens blijven bewaard.")
         count_hint.setWordWrap(True)
         counts.addWidget(count_hint)
+        self.metadata_button = set_button_role(QPushButton('Vragen indelen'), 'secondary')
+        self.metadata_button.clicked.connect(self.metadata)
+        self.mc_button = set_button_role(QPushButton('Meerkeuze instellen'), 'secondary')
+        self.mc_button.clicked.connect(self.multiple_choice)
+        counts.addWidget(self.metadata_button)
+        counts.addWidget(self.mc_button)
+        setup_title = QLabel('Toets instellen')
+        setup_title.setStyleSheet('font-weight:600; color:#314766;')
+        layout.addWidget(setup_title)
         layout.addLayout(counts)
         self.undo_button = QPushButton("Ongedaan maken (Ctrl+Z)")
+        set_button_role(self.undo_button, 'secondary')
         self.undo_button.clicked.connect(self.undo)
-        actions.addWidget(self.undo_button)
         self.direction = QComboBox()
         self.direction.addItem("Horizontaal (per leerling)", "horizontal")
         self.direction.addItem("Verticaal (per vraag)", "vertical")
@@ -205,11 +217,9 @@ class SimpleWorkspace(QWidget):
         self.precision.setCurrentIndex(max(0, self.precision.findData(float(database.meta("score_step", "1")))))
         self.precision.currentIndexChanged.connect(self.change_precision)
         actions.addWidget(self.precision)
-        for label, fn in (("Vragen indelen", self.metadata), ("Meerkeuze instellen", self.multiple_choice),
-                          ("Leerling verwijderen", self.remove_student)):
-            button = QPushButton(label)
-            button.clicked.connect(fn)
-            actions.addWidget(button)
+        route_title = QLabel('Invoerroute en punten')
+        route_title.setStyleSheet('font-weight:600; color:#314766;')
+        layout.addWidget(route_title)
         layout.addLayout(actions)
         self.table = QTableWidget()
         self.table.setMinimumHeight(220)
@@ -224,17 +234,28 @@ class SimpleWorkspace(QWidget):
         self.table.setSelectionMode(QTableWidget.SelectionMode.ContiguousSelection)
         self.progress = QLabel()
         self.progress.setWordWrap(True)
-        layout.addWidget(self.progress)
+        table_actions = WrappingLayout()
+        table_actions.addWidget(self.progress)
+        table_actions.addWidget(self.undo_button)
         self.large_button = QPushButton('Groot invoerscherm')
+        set_button_role(self.large_button, 'secondary')
         self.large_button.clicked.connect(self.open_large_input)
-        layout.addWidget(self.large_button)
+        table_actions.addWidget(self.large_button)
+        layout.addLayout(table_actions)
         layout.addWidget(self.table, 1)
         self.legend = QLabel()
         self.legend.setWordWrap(True)
         layout.addWidget(self.legend)
         self.first_missing = QPushButton("Ga naar de eerste ontbrekende invoer")
+        set_button_role(self.first_missing, 'secondary')
         self.first_missing.clicked.connect(self.go_missing)
-        layout.addWidget(self.first_missing)
+        below_table = QHBoxLayout()
+        below_table.addWidget(self.first_missing)
+        below_table.addStretch()
+        self.remove_button = set_button_role(QPushButton('Leerling verwijderen'), 'danger')
+        self.remove_button.clicked.connect(self.remove_student)
+        below_table.addWidget(self.remove_button)
+        layout.addLayout(below_table)
         self.stack.addWidget(self.input)
         self.saved = QLabel()
         root.addWidget(self.saved)
@@ -275,8 +296,10 @@ class SimpleWorkspace(QWidget):
         layout.addWidget(self.large_saved)
         buttons = QHBoxLayout()
         save = QPushButton('Opslaan')
+        set_button_role(save, 'primary')
         save.clicked.connect(lambda: self.save())
         back = QPushButton('Terug naar hoofdscherm')
+        set_button_role(back, 'secondary')
         back.clicked.connect(dialog.accept)
         buttons.addWidget(save)
         buttons.addStretch()
@@ -339,7 +362,11 @@ class SimpleWorkspace(QWidget):
         self.table.clear()
         self.table.setColumnCount(len(self.questions) + 2)
         self.table.setRowCount(len(self.students) + 2)
-        self.table.setHorizontalHeaderLabels(["Leerlingnaam"] + ["Vraag " + q["label"] for q in self.questions] + ["Totaal"])
+        labels = ['Leerlingnaam'] + [
+            'Vraag ' + q['label'] + ('\nSleutel: ' + str(q['multiple_choice_answer'] or '—') if q['is_multiple_choice'] else '')
+            for q in self.questions] + ['Totaal']
+        self.table.setHorizontalHeaderLabels(labels)
+        self.table.horizontalHeader().setFixedHeight(54 if any(q['is_multiple_choice'] for q in self.questions) else 38)
         stored_students = int(self.database.scalar("SELECT COUNT(*) FROM test_students WHERE test_id=1"))
         hidden_students = stored_students > len(self.students)
         self.table.setVerticalHeaderLabels(["Maximum"] + [s["display_name"] for s in self.students] + ["Verborgen" if hidden_students else "+ Nieuw"])
@@ -393,6 +420,7 @@ class SimpleWorkspace(QWidget):
             return
         self.table.verticalHeader().set_active_row(row if 1 <= row <= len(self.students) else -1)
         self.table.horizontalHeader().set_active_column(col if 1 <= col <= len(self.questions) else -1)
+        self.remove_button.setEnabled(1 <= row <= len(self.students))
         blocked = self.table.blockSignals(True)
         try:
             for r in {previous_row, row}:
@@ -435,6 +463,13 @@ class SimpleWorkspace(QWidget):
         finalized = has_active_normalization(self.database, 1)
         self.norm_button.setEnabled(ready)
         self.analysis_button.setEnabled(ready)
+        for button, primary in ((self.input_button, not ready),
+                                (self.norm_button, ready and not finalized),
+                                (self.analysis_button, ready and finalized)):
+            set_button_role(button, 'primary' if primary else 'secondary')
+            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            button.style().unpolish(button)
+            button.style().polish(button)
         partial = ready and not finalized
         self.analysis_button.setProperty("partial_analysis", partial)
         self.analysis_button.setStyleSheet("QPushButton { background: #d97706; color: white; } QPushButton:hover { background: #b45309; }" if partial else "")
@@ -923,7 +958,7 @@ def export_simple_excel(database, path):
         cell.fill = PatternFill("solid", fgColor="2463EB")
         cell.font = Font(color="FFFFFF", bold=True)
     keys = workbook.create_sheet("Vragen en metadata")
-    definitions = list(database.rows("SELECT * FROM taxonomy_definitions ORDER BY id"))
+    definitions = active_taxonomies(database)
     keys.append(["Vraag", "Maximumscore", "Antwoordsleutel"] + [d["name"] for d in definitions])
     for q in questions:
         categories = [database.scalar("SELECT v.name FROM question_taxonomy_values qtv JOIN taxonomy_values v ON v.id=qtv.taxonomy_value_id WHERE qtv.question_id=? AND qtv.taxonomy_id=?", (q["id"], d["id"])) for d in definitions]

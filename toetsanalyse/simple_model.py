@@ -79,6 +79,17 @@ def active_students(database):
     return [dict(row) for row in database.rows("SELECT s.id,s.display_name FROM students s JOIN test_students ts ON ts.student_id=s.id WHERE ts.test_id=1 ORDER BY s.id LIMIT ?", (count,))]
 
 
+def active_taxonomies(database):
+    selected = database.rows('SELECT d.* FROM taxonomy_definitions d JOIN test_taxonomy_selections s '
+                             'ON s.taxonomy_id=d.id WHERE s.test_id=1 ORDER BY d.id')
+    if selected or database.meta('simple_taxonomy_selection_configured', '0') == '1':
+        return selected
+    # Older documents can contain classifications without a saved selection.
+    return database.rows('SELECT DISTINCT d.* FROM taxonomy_definitions d '
+                         'JOIN question_taxonomy_values q ON q.taxonomy_id=d.id '
+                         'JOIN matrix_questions mq ON mq.id=q.question_id WHERE mq.test_id=1 ORDER BY d.id')
+
+
 def set_counts(database, question_count, student_count):
     if not 1 <= question_count <= 1000 or not 0 <= student_count <= 10000:
         raise ValueError("Kies 1–1000 vragen en 0–10000 leerlingen.")
@@ -129,6 +140,10 @@ def project_active(database):
     database.connection.backup(projected.connection)
     connection = projected.connection
     connection.execute("PRAGMA foreign_keys=OFF")
+    taxonomies = {row['id'] for row in active_taxonomies(database)}
+    for row in projected.rows('SELECT DISTINCT taxonomy_id FROM question_taxonomy_values'):
+        if row['taxonomy_id'] not in taxonomies:
+            connection.execute('DELETE FROM question_taxonomy_values WHERE taxonomy_id=?', (row['taxonomy_id'],))
     questions = {q["id"] for q in active_questions(database)}
     students = {s["id"] for s in active_students(database)}
     for row in projected.rows("SELECT id FROM matrix_questions WHERE test_id=1"):

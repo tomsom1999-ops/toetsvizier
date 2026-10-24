@@ -43,7 +43,11 @@ gemaakt en telt als nul; een lege cel moet nog worden ingevuld. Afwezige leerlin
 neemt u niet op. De tabel heeft een kleurenlegenda.
 
 Met **Vragen indelen** koppelt u optionele RTTI-, OBIT- en Bloom-categorieën of eigen
-indelingen en categorieën. Met **Meerkeuze instellen** kiest u per vraag een sleutel;
+indelingen. Vink aan welke verdelingen u wilt gebruiken; alleen die kolommen
+verschijnen in het indeelscherm, de analyse en de Excel-export. Uitvinken bewaart
+eerder gekozen categorieën. De antwoordsleutel van een meerkeuzevraag staat ook
+zichtbaar in de kolomkop van de scoretabel.
+Met **Meerkeuze instellen** kiest u per vraag een sleutel;
 daarna voert u antwoordletters in. Zonder sleutel gebruikt u punten. **Exporteren
 naar Excel** bewaart de zichtbare tabel en de vraaginstellingen/metadata.
 

@@ -77,11 +77,15 @@ def fit_table_controls(table):
 
 
 def dutch_buttons(box):
+    from .ui_helpers import set_button_role
     names = {QDialogButtonBox.StandardButton.Save: "Opslaan", QDialogButtonBox.StandardButton.Cancel: "Annuleren",
              QDialogButtonBox.StandardButton.Ok: "OK", QDialogButtonBox.StandardButton.Close: "Sluiten"}
     for role, label in names.items():
         if box.button(role):
             box.button(role).setText(label)
+            set_button_role(box.button(role), 'secondary' if role in {
+                QDialogButtonBox.StandardButton.Cancel, QDialogButtonBox.StandardButton.Close
+            } else 'primary')
 
 
 def question(parent, title, text, buttons=QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
