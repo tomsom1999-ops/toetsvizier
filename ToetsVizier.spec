@@ -26,6 +26,15 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+# Qt uses the Windows ICU API. A Poppler directory on PATH can supply a DLL
+# with the same name but version-suffixed exports, which breaks QtCore.
+a.binaries = [
+    entry for entry in a.binaries
+    if not (
+        '/poppler/' in Path(entry[1]).as_posix().casefold()
+        and Path(entry[0]).name.casefold().startswith(('icuuc', 'icuin', 'icudt'))
+    )
+]
 pyz = PYZ(a.pure)
 
 exe = EXE(
