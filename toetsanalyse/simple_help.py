@@ -58,7 +58,8 @@ TOPICS = [
      "Voer vraag 1 en 2 in voor de eerste leerling, dan vraag 1 en 2 voor de volgende leerling. "
      "Na alle leerlingen schuift Beginvraag automatisch naar het volgende blok en keert de richting om.</p>"
      "<p>De invoer blijft bij de scorecellen en stopt bij het einde van de toets. De pijlen in het voorbeeld tonen de route.</p>"
-     "<p><b>Groot invoerscherm</b> opent dezelfde tabel met alle invoerinstellingen in een ruim venster. "
+     "<p><b>Groot invoerscherm</b> geeft de tabel zo veel mogelijk ruimte en toont alleen de bediening die u tijdens het invoeren nodig heeft. "
+     "Met Uitleg invoerscherm opent u deze uitleg ook vanuit die grote weergave. "
      "Keer terug met Terug naar hoofdscherm; uw gegevens en instellingen blijven behouden. "
      "De voortgangsteller laat zien hoeveel scores ingevuld en nog open zijn.</p>", "direction"),
     ("Meerkeuze en vragen indelen", "<p>Deze extra's zijn <b>optioneel</b>. U hoeft ze niet te gebruiken om een analyse te maken.</p>"

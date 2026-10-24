@@ -817,6 +817,7 @@ class SimpleModeTests(unittest.TestCase):
                 from PySide6.QtWidgets import QPushButton
                 large_button_texts = {button.text() for button in w.large_dialog.findChildren(QPushButton)}
                 self.assertNotIn('Opslaan', large_button_texts)
+                self.assertIn('Uitleg invoerscherm', large_button_texts)
                 self.assertIn('Terug naar hoofdscherm', large_button_texts)
                 w.direction.setCurrentIndex(w.direction.findData('vertical'))
                 w.vertical_direction.setCurrentIndex(w.vertical_direction.findData('up'))
