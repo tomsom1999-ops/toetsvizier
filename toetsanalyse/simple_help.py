@@ -40,6 +40,15 @@ TOPICS = [
      "N is lichtoranje. De actieve leerling en vraag en een volledig ingevuld totaal zijn blauw.</p>"
      "<p>Is de invoer ongeldig? De cel krijgt een rode rand en bovenaan staat wat u moet corrigeren. "
      "Met Eerste lege score springt u ook naar zo'n cel.</p>", "scores"),
+    ("Kleuren bij het invoeren", "<p>De kleuren helpen u snel controleren wat voor invoer in een cel staat. "
+     "De waarde blijft altijd zichtbaar: u hoeft dus niet alleen op kleur te vertrouwen.</p>"
+     "<p><b>Blauw:</b> de actieve leerling en vraag, de rij met maximumscores en een volledig ingevuld totaal. "
+     "<b>Wit:</b> een gewone puntenscore of een cel die nog leeg is. "
+     "<b>Groen:</b> het gekozen antwoord op een meerkeuzevraag is goed. "
+     "<b>Lichtrood:</b> het gekozen meerkeuzeantwoord is fout. "
+     "<b>Lichtoranje:</b> N, de vraag is niet gemaakt. "
+     "<b>Rode rand:</b> de invoer is ongeldig, bijvoorbeeld meer punten dan de maximumscore.</p>"
+     "<p>Onder de invoertabel staat dezelfde kleurenlegenda steeds opnieuw vermeld.</p>", "colors"),
     ("Vanuit Excel plakken", "<p><b>Alleen scores:</b> kopieer bijvoorbeeld twee rijen met elk drie scores uit Excel. "
      "Klik in Toetsvizier op de scorecel van de <b>eerste leerling, vraag 1</b> en druk op <b>Ctrl+V</b>.</p>"
      "<p><b>Namen én scores:</b> kopieer bijvoorbeeld <b>Sam | 2 | 0 | N</b> en <b>Alex | 1 | 2 | 2</b> "
@@ -214,8 +223,15 @@ class InputDemo(QWidget):
         self.table.setMinimumHeight(150)
         layout.addWidget(self.table, 1)
         layout.addWidget(self.progress)
-        self.legend = QLabel("Kleurenlegenda: blauw = actief/maximum/totaal · wit = punten · groen = goed antwoord · "
-                             "lichtrood = fout antwoord · lichtoranje = N · rode rand = ongeldige invoer")
+        self.legend = QLabel(
+            "<b>Kleurenlegenda:</b> "
+            "<span style='background:#dbeafe;padding:2px 5px'>blauw = actief, maximum of totaal</span> · "
+            "<span style='background:#ffffff;padding:2px 5px'>wit = punten of leeg</span> · "
+            "<span style='background:#e8f7e8;padding:2px 5px'>groen = goed antwoord</span> · "
+            "<span style='background:#fdecec;padding:2px 5px'>lichtrood = fout antwoord</span> · "
+            "<span style='background:#fff8ed;padding:2px 5px'>lichtoranje = N</span> · "
+            "<span style='border:2px solid #dc2626;padding:1px 4px'>rode rand = ongeldig</span>"
+        )
         self.legend.setWordWrap(True)
         layout.addWidget(self.legend)
         self.overlay = DemoOverlay(self)
@@ -239,6 +255,7 @@ class InputDemo(QWidget):
         if area == "counts": return [self.widget_rect(self.counts)]
         if area == "names": return [self.cell_rect(0, 1).united(self.cell_rect(0, 3)), self.cell_rect(1, 0).united(self.cell_rect(2, 0))]
         if area == "scores": return [self.cell_rect(1, 1).united(self.cell_rect(2, 3))]
+        if area == "colors": return [self.cell_rect(0, 1).united(self.cell_rect(2, 4)), self.widget_rect(self.legend)]
         if area == "paste": return [self.cell_rect(1, 1 if self.variant == 0 else 0)]
         if area == "direction": return [self.widget_rect(self.routes)]
         if area == "extras": return [self.widget_rect(self.metadata), self.widget_rect(self.multiple_choice)]
@@ -320,6 +337,7 @@ class InputIntroduction(QDialog):
         self.demo.route_choice.setCurrentIndex(0)
         self.caption.setText("De oranje cel is de begincel voor uw plakactie." if area == "paste" else
                              "De groene pijlen laten zien waar Enter of Tab u naartoe brengt." if area == "direction" else
+                             "De voorbeeldcellen en legenda gebruiken exact dezelfde kleuren als het invoerscherm." if area == "colors" else
                              "Voorbeeldscherm: de oranje omlijning wijst het besproken onderdeel aan.")
         self.demo.overlay.update()
         self.previous.setEnabled(index > 0)
