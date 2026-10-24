@@ -1,26 +1,27 @@
 {
-  "latest_version": "0.5.0",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.5.0",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.5.0/ToetsVizier-0.5.0-windows-installer.exe",
-  "release_notes": "ToetsVizier 0.5.0 introduceert de aparte simpele modus voor losse toetsen en meerdere versies binnen een toets in de uitgebreide modus. Inclusief uitgebreide uitleg, CITO-import, Excel-invoer en verbeterde analyse.",
+  "latest_version": "1.0.0",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v1.0.0",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.0.0/ToetsVizier-1.0.0-windows-installer.exe",
+  "release_notes": "ToetsVizier 1.0.0 maakt de simpele analysemodus compleet met automatisch opslaan, snellere score-invoer, duidelijke kleuren en flexibel in te delen vraagmetadata.",
   "versions": [
     {
-      "version": "0.5.0",
-      "type": "minor",
-      "title": "Simpele modus en meerdere toetsversies",
+      "version": "1.0.0",
+      "type": "major",
+      "title": "Simpele modus compleet",
       "changes": [
-        "Nieuw startscherm met Simpel voor een losse toets en Uitgebreid voor vakken en klassen.",
-        "Simpel: starten met vraag- en leerlingaantallen, een ingevuld CITO-analyseformulier uploaden of een opgeslagen .tviz-analyse openen.",
-        "Uitgebreide schermuitleg met voorbeelden, legenda en een knop om de uitleg over te slaan.",
-        "Scores invoeren per leerling of per vraag, plakken vanuit Excel, N voor niet gemaakt en optionele meerkeuze-antwoordsleutels.",
-        "Vraagmetadata met RTTI, OBIT, Bloom en zelf in te richten categorie\u00ebn; Excel-export en aparte analysebestanden.",
-        "Aantallen aanpassen zonder verborgen gegevens te verwijderen; analyse zonder normering is herkenbaar oranje en gedeeltelijk beschikbaar.",
-        "Uitgebreid: optionele toetsversies met gemeenschappelijke en specifieke vragen, herkenbare vraagtitels en leerlingtoewijzing.",
-        "Meerkeuzealternatieven tussen versies koppelen, een leidende versie voor alternatieven kiezen en per versie normeren en analyseren.",
-        "Extra controles op gegevensbehoud, berekeningen, updates en het uitsluiten van lokale analysebestanden uit releases."
+        "Een analyse krijgt direct een eigen .tviz-opslagbestand en wordt daarna automatisch tussentijds opgeslagen.",
+        "De bestandsnaam wordt de herkenbare titel van de analyse; bestaande aangepaste titels blijven behouden.",
+        "Vernieuwd invoerscherm met rustigere knoppen, een kleurenlegenda en zichtbare voortgang.",
+        "Scores invoeren per leerling of per vraag, met richting omhoog of omlaag en werken in vraagblokken.",
+        "Automatisch doorspringen bij gehele scores wanneer de maximumscore hoogstens 9 is.",
+        "Delete en Backspace wissen scores veilig; ongedaan maken werkt ook in de grote invoerweergave.",
+        "Meerkeuzevragen tonen de antwoordsleutel bij de vraag en letters kunnen direct worden ingevoerd.",
+        "RTTI, OBIT, Bloom en meerdere eigen vraagindelingen zijn afzonderlijk te kiezen en eigen indelingen kunnen worden verwijderd.",
+        "Uitgebreidere uitleg, kleurbetekenissen en invoervoorbeelden helpen nieuwe gebruikers op weg.",
+        "Controleren op nieuwe versies staat bij nieuwe installaties standaard aan."
       ]
     }
   ],
   "update_type": "installer",
-  "installer_sha256": "0e622141c70a7850e3343f30135a6111b7cb686063d31fc9e993eba765611c1d"
+  "installer_sha256": "4fcc114890f76254e2049cd2523d0da6b2e88bcda602cef36c28fd6b96a8e6ad"
 }
