@@ -472,7 +472,7 @@ function activate(name) {{
 }}
 document.querySelectorAll(".tab").forEach(button => button.addEventListener("click", () => activate(button.dataset.tab)));
 document.getElementById("title").textContent = "Toetsanalyse - " + data.test.name;
-document.getElementById("context").textContent = [data.test.school_year, data.test.level, data.test.grade_year, data.test.period].filter(Boolean).join("  |  ") + (data.normalization_finalized ? "  |  Vastgestelde normering" : "  |  Cijfers volgens conceptnormering");
+document.getElementById("context").textContent = [data.test.school_year, data.test.level, data.test.grade_year, data.test.period].filter(Boolean).join("  |  ") + (data.normalization_finalized ? "  |  Vastgestelde normering" : "  |  Nog geen vastgestelde normering: cijfers zijn nog niet beschikbaar");
 document.getElementById("scopeBadge").textContent = data.subtest_context ? ("Deeltoetsanalyse · " + data.subtest_context.name) : "Een toetsanalyse";
 function renderKpis(target, cards) {{
   document.getElementById(target).innerHTML = cards.map(card => `<article class="card kpi ${{card.level || ""}}"><div class="kpi-label">${{esc(card.label)}}</div><div class="kpi-value">${{card.value}}</div><div class="kpi-note">${{card.note || ""}}</div></article>`).join("");
@@ -680,7 +680,7 @@ function itemAnalysisRows() {{
     const label = isSub
       ? `<span class="item-label-sub">${{esc(item.display_label || item.label)}}</span>`
       : `<span class="item-label-main">${{esc(item.display_label || ("Vraag " + item.label))}}</span>`;
-    return `<tr class="${{isSub ? "item-sub-row" : "item-main-row"}}"><td>${{label}}</td><td class="num">${{metricChip(item.p_value, item.p_status)}}</td><td class="num">${{metricChip(item.rit, item.rit_status)}}</td><td class="num">${{metricChip(item.rir, item.rir_status)}}</td><td class="decision">${{badge(item.status)}}<div class="decision-detail">${{esc(item.status.reason)}}<br>${{esc(item.status.advice)}}</div></td></tr>`;
+    return `<tr class="${{isSub ? "item-sub-row" : "item-main-row"}}"><td>${{label}}<div class="mini-note">${{item.participant_count ?? data.participant_count}} leerlingen</div></td><td class="num">${{metricChip(item.p_value, item.p_status)}}</td><td class="num">${{metricChip(item.rit, item.rit_status)}}</td><td class="num">${{metricChip(item.rir, item.rir_status)}}</td><td class="decision">${{badge(item.status)}}<div class="decision-detail">${{esc(item.status.reason)}}<br>${{esc(item.status.advice)}}</div></td></tr>`;
   }}).join("");
 }}
 function renderMultipleChoiceAnalysis() {{
@@ -708,14 +708,14 @@ function renderMultipleChoiceAnalysis() {{
     const options = (item.responses || []).map(response => {{
       const fillWidth = Math.max(0, Math.min(100, Number(response.percentage || 0)));
       return `<div class="mc-option-row" title="${{esc(response.accepted ? "Goedgekeurd antwoord" : "Afleider of fout antwoord")}}">
-        <div class="mc-option-letter">${{esc(response.option)}}${{response.accepted ? " (goed)" : ""}}</div>
+        <div class="mc-option-letter">${{esc(response.option)}}${{response.accepted ? " (goed)" : ""}}${{response.version_options ? `<div class="mini-note">${{response.version_options.map(link => esc(link.version + ": " + link.option)).join(" / ")}}</div>` : ""}}</div>
         <div class="mc-option-bar"><div class="mc-option-fill ${{response.accepted ? "correct" : ""}}" style="width:${{fillWidth}}%"></div></div>
         <div class="num">${{response.count}} (${{percentage(response.percentage)}})</div>
       </div>`;
     }}).join("");
     return `<section class="mc-question">
       <div class="mc-question-head">
-        <div><div class="mc-question-title">Vraag ${{esc(item.label)}} · sleutel: ${{esc(answerText)}} · juist: ${{percentage(correctPercentage)}}</div><div class="mc-description">${{esc(item.description || "Geen omschrijving ingevuld.")}}</div>${{notMadeText}}</div>
+        <div><div class="mc-question-title">Vraag ${{esc(item.label)}} · sleutel: ${{esc(answerText)}} · juist: ${{percentage(correctPercentage)}}</div><div class="mc-description">${{esc(item.description || "Geen omschrijving ingevuld.")}}</div>${{item.reference_version ? `<div class="mc-description"><strong>Leidende alternatiefletters:</strong> versie ${{esc(item.reference_version)}} (vraag ${{esc(item.reference_question)}})</div>` : ""}}${{notMadeText}}</div>
         <div class="mc-metrics">${{metricChip(item.p_value, item.p_status)}} ${{metricChip(item.rit, item.rit_status)}} ${{metricChip(item.rir, item.rir_status)}} ${{badge(item.conclusion)}}</div>
       </div>
       <div class="mc-options">

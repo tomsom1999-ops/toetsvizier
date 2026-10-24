@@ -118,13 +118,15 @@ def matrix_report_data(database: SubjectDatabase, test_id: int) -> dict[str, Any
         dict(row)
         for row in database.rows(
             "SELECT id, question_number || COALESCE(subquestion, '') AS label, maximum_score, "
-            "short_description, expected_time_minutes "
+            "short_description, shared_title, expected_time_minutes "
             f"FROM matrix_questions WHERE test_id=? ORDER BY {QUESTION_ORDER_SQL}",
             (test_id,),
         )
     ]
     for question in questions:
         question["maximum_score"] = float(question["maximum_score"])
+        if question["shared_title"]:
+            question["label"] = question["shared_title"] + " (" + question["label"] + ")"
 
     taxonomy_values: dict[int, dict[int, str]] = {taxonomy["id"]: {} for taxonomy in taxonomies}
     for row in database.rows(

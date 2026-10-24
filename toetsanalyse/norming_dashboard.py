@@ -588,8 +588,11 @@ function renderPlots(rows) {{
 }}
 function renderSummary(rows) {{
   const scores = rows.map(row=>row.score);
+  const pass = passScore();
+  const passText = pass === null ? "-" : `${{format(pass, pass % 1 ? 1 : 0)}} punten${{maximum ? " (" + format(pass / maximum * 100, 1) + "%)" : ""}}`;
   const entries = [
     ["Maximum score", format(maximum, maximum % 1 ? 1 : 0)],
+    ["Voldoendegrens", passText],
     ["Gemiddelde score", scores.length ? format(mean(scores)) : "-"],
     ["Mediaan score", scores.length ? format(median(scores)) : "-"],
     ["Standaarddeviatie", scores.length > 1 ? format(sd(scores)) : "-"],

@@ -1040,7 +1040,7 @@ class TestDialog(FormDialog):
         selected_class_ids=None, selected_taxonomy_ids=None, selected_property_ids=None,
         selected_property_options=None, selected_question_types=None,
         students=None, selected_extra_student_ids=None,
-        parent: QWidget | None = None
+        parent: QWidget | None = None, allow_versions: bool = False
     ) -> None:
         super().__init__("Toets bewerken" if test else "Nieuwe toets", parent)
         self._loading_test_config = True
@@ -1143,6 +1143,14 @@ class TestDialog(FormDialog):
                 if property_definition["name"] == "Vraagtype":
                     self.question_types = options
         self.form.addRow("Naam *", self.name)
+        self.use_versions = QCheckBox("Deze toets heeft meerdere versies")
+        self.version_names = QLineEdit("A, B, C")
+        self.version_names.setPlaceholderText("Versienamen, gescheiden door komma's")
+        self.use_versions.setVisible(allow_versions and not test)
+        self.version_names.setVisible(False)
+        self.use_versions.toggled.connect(self.version_names.setVisible)
+        self.form.addRow(self.use_versions)
+        self.form.addRow(self.version_names)
         self.form.addRow("Periode *", self.period)
         self.form.addRow("Toetssoort *", self.test_type)
         self.resit_label = QLabel("Herkansing van *")
@@ -1213,6 +1221,11 @@ class TestDialog(FormDialog):
     def accept(self) -> None:
         if not self.required(self.name, "een toetsnaam"):
             return
+        if self.use_versions.isChecked():
+            names = [name.strip() for name in self.version_names.text().split(",")]
+            if len(names) < 2 or any(not name for name in names) or len(set(names)) != len(names):
+                QMessageBox.warning(self, "Versienamen", "Vul minstens twee verschillende versienamen in.")
+                return
         if self.test_type.currentText() == "Herkansing" and self.original_test.currentData() is None:
             QMessageBox.warning(self, "Oorspronkelijke toets ontbreekt", "Kies van welke toets dit een herkansing is.")
             return
@@ -2561,7 +2574,8 @@ class TestsPage(Page):
         properties = self.database.rows(
             "SELECT id, name, choices_json FROM property_definitions WHERE is_active=1 ORDER BY id"
         )
-        dialog = TestDialog(classes, originals, taxonomies, properties, students=students, parent=self)
+        dialog = TestDialog(classes, originals, taxonomies, properties, students=students, parent=self,
+                            allow_versions=self.database.meta("test_versions_enabled", "0") == "1")
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         minutes = dialog.minutes.value() or None
@@ -2583,6 +2597,9 @@ class TestsPage(Page):
             ),
         )
         test_id = cursor.lastrowid
+        if dialog.use_versions.isChecked():
+            from .test_versions import create_versions
+            create_versions(self.database, test_id, dialog.version_names.text().split(","))
         for class_id in dialog.checked_class_ids():
             self.database.connection.execute(
                 "INSERT INTO test_classes(test_id, class_id) VALUES(?, ?)",
@@ -3550,6 +3567,9 @@ class AdvancedSettingsPage(Page):
             "Toont een aparte module om resultaten te vergelijken op basis van leerlingkenmerken zoals profiel of extra tijd."
         )
         self.analysis_parts = QCheckBox("Toets opsplitsen voor analyse meenemen")
+        self.test_versions = QCheckBox("Meerdere versies binnen één toets ontgrendelen")
+        self.test_versions.setToolTip("Maakt de optionele versie-instelling zichtbaar bij het aanmaken van een nieuwe toets.")
+        self.test_versions.toggled.connect(self.save_settings)
         self.analysis_parts.setToolTip(
             "Toont in het vragenoverzicht een knop om een toets voor analyse op te knippen in deeltoetsen."
         )
@@ -3562,6 +3582,7 @@ class AdvancedSettingsPage(Page):
         panel_layout.addWidget(self.development_analysis)
         panel_layout.addWidget(self.student_attribute_analysis)
         panel_layout.addWidget(self.analysis_parts)
+        panel_layout.addWidget(self.test_versions)
         layout.addWidget(panel)
 
         update_panel = QFrame()
@@ -3613,6 +3634,7 @@ class AdvancedSettingsPage(Page):
         self.development_analysis.blockSignals(True)
         self.student_attribute_analysis.blockSignals(True)
         self.analysis_parts.blockSignals(True)
+        self.test_versions.blockSignals(True)
         self.update_manifest_url.blockSignals(True)
         self.update_manifest_unlock.blockSignals(True)
         self.update_auto_check.blockSignals(True)
@@ -3620,6 +3642,7 @@ class AdvancedSettingsPage(Page):
         self.development_analysis.setChecked(development_analysis_enabled(self.database))
         self.student_attribute_analysis.setChecked(student_attribute_analysis_enabled(self.database))
         self.analysis_parts.setChecked(self.database.meta("analysis_parts_enabled", "0") == "1")
+        self.test_versions.setChecked(self.database.meta("test_versions_enabled", "0") == "1")
         source_unlocked = settings_bool(self.settings, UPDATE_MANIFEST_EDIT_UNLOCK_KEY, False)
         self.update_manifest_unlock.setChecked(source_unlocked)
         if source_unlocked:
@@ -3631,6 +3654,7 @@ class AdvancedSettingsPage(Page):
         self.development_analysis.blockSignals(False)
         self.student_attribute_analysis.blockSignals(False)
         self.analysis_parts.blockSignals(False)
+        self.test_versions.blockSignals(False)
         self.update_manifest_url.blockSignals(False)
         self.update_manifest_unlock.blockSignals(False)
         self.update_auto_check.blockSignals(False)
@@ -3644,6 +3668,7 @@ class AdvancedSettingsPage(Page):
             "1" if self.student_attribute_analysis.isChecked() else "0",
         )
         self.database.set_meta("analysis_parts_enabled", "1" if self.analysis_parts.isChecked() else "0")
+        self.database.set_meta("test_versions_enabled", "1" if self.test_versions.isChecked() else "0")
         self.database.connection.commit()
         self.save_update_settings()
         self.changed.emit()
@@ -4500,7 +4525,8 @@ class NormingBridge(QObject):
         if test_id is None:
             return json.dumps({"ok": False, "message": "Selecteer eerst een toets."})
         try:
-            save_normalization(self.page.database, test_id, json.loads(settings_json))
+            save_normalization(self.page.norming_database(), test_id, json.loads(settings_json))
+            self.page.normalization_changed.emit()
         except Exception as error:
             return json.dumps({"ok": False, "message": str(error)})
         return json.dumps({"ok": True, "message": "Normering vastgesteld en vergrendeld."})
@@ -4510,7 +4536,11 @@ class NormingBridge(QObject):
         test_id = self.page.test.currentData()
         if test_id is None:
             return json.dumps({"ok": False, "message": "Selecteer eerst een toets."})
-        answer = QMessageBox.question(
+        ask = QMessageBox.question
+        if self.page.database.meta("document_kind", "") == "simple_analysis":
+            from .simple_widgets import question
+            ask = question
+        answer = ask(
             self.page,
             "Vastgestelde normering opheffen",
             "Weet u zeker dat u de vastgestelde normering wilt opheffen?\n\n"
@@ -4521,8 +4551,9 @@ class NormingBridge(QObject):
         if answer != QMessageBox.StandardButton.Yes:
             return json.dumps({"ok": False, "cancelled": True, "message": "Opheffen geannuleerd."})
         try:
-            remove_normalization(self.page.database, test_id)
-            settings = load_normalization(self.page.database, test_id)
+            remove_normalization(self.page.norming_database(), test_id)
+            settings = load_normalization(self.page.norming_database(), test_id)
+            self.page.normalization_changed.emit()
         except Exception as error:
             return json.dumps({"ok": False, "message": str(error)})
         return json.dumps(
@@ -4541,7 +4572,7 @@ class NormingBridge(QObject):
         try:
             request = json.loads(request_json)
             rows = participant_rows(request.get("rows", []))
-            data = dashboard_data(self.page.database, test_id)
+            data = dashboard_data(self.page.norming_database(), test_id)
             test = data["test"]
             maximum = float(data["maximum_score"])
             method = str(request.get("method", "Normering"))
@@ -4604,6 +4635,8 @@ class NormingBridge(QObject):
 
 
 class NormingPage(Page):
+    normalization_changed = Signal()
+
     def __init__(self, database: SubjectDatabase, year_id: int | None) -> None:
         super().__init__(database, year_id)
         layout = QVBoxLayout(self)
@@ -4618,6 +4651,9 @@ class NormingPage(Page):
         self.test = QComboBox()
         self.test.setMinimumWidth(320)
         self.test.currentIndexChanged.connect(self.load_dashboard)
+        self.version = QComboBox()
+        self.version.currentIndexChanged.connect(self.load_dashboard)
+        self._version_projection = None
         selector.addWidget(title)
         selector.addStretch()
         selector.addWidget(QLabel("Niveau"))
@@ -4626,6 +4662,7 @@ class NormingPage(Page):
         selector.addWidget(self.grade_filter)
         selector.addWidget(QLabel("Toets"))
         selector.addWidget(self.test)
+        selector.addWidget(self.version)
         layout.addLayout(selector)
         if _can_use_webengine():
             self.dashboard = QWebEngineView()
@@ -4776,8 +4813,20 @@ class NormingPage(Page):
                 "De geselecteerde toets kon niet in normering worden geopend. Controleer het schooljaar.",
             )
 
+    def norming_database(self):
+        from .test_versions import versions, project_version
+        test_id = self.test.currentData()
+        if not versions(self.database, test_id):
+            return self.database
+        if self._version_projection is not None:
+            self._version_projection.close()
+        self._version_projection = project_version(self.database, test_id, self.version.currentData())
+        return self._version_projection
+
     def load_dashboard(self) -> None:
         test_id = self.test.currentData()
+        from .version_dialog import fill_version_combo
+        fill_version_combo(self.version, self.database, test_id)
         if test_id is None:
             if QWebEngineView is not None and isinstance(self.dashboard, QWebEngineView):
                 self.dashboard.setHtml(
@@ -4789,11 +4838,15 @@ class NormingPage(Page):
         if QWebEngineView is None or not isinstance(self.dashboard, QWebEngineView):
             return
         try:
-            data = dashboard_data(self.database, test_id)
-            data["is_finalized"] = has_active_normalization(self.database, test_id)
-            settings = load_normalization(self.database, test_id)
+            scoped_database = self.norming_database()
+            data = dashboard_data(scoped_database, test_id)
+            data["is_finalized"] = has_active_normalization(scoped_database, test_id)
+            settings = load_normalization(scoped_database, test_id)
             asset_directory = Path(__file__).parent / "assets"
             html_content = build_norming_dashboard_html(data, settings, "plotly-2.35.2.min.js")
+            if self.database.meta("document_kind", "") == "simple_analysis":
+                from .simple_presentation import simplify_dashboard
+                html_content = simplify_dashboard(html_content,"norm")
             self.dashboard.setHtml(
                 html_content,
                 QUrl.fromLocalFile(str(asset_directory.resolve()) + "/"),
@@ -4985,49 +5038,128 @@ class SubjectWorkspace(QWidget):
         QMessageBox.information(self, "Back-up gemaakt", f"Back-up opgeslagen als:\n{target.name}")
 
 
+class SimpleMenuPage(QWidget):
+    new_simple = Signal()
+    import_simple = Signal()
+    open_simple = Signal()
+    back = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        root = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        content = QWidget()
+        centered = QHBoxLayout(content)
+        centered.addStretch()
+        panel = QFrame()
+        panel.setObjectName("startPanel")
+        panel.setMaximumWidth(850)
+        layout = QVBoxLayout(panel)
+        layout.addWidget(QLabel("<h1>Simpel</h1>"))
+        introduction = QLabel("Werk met één losse toets, zonder vak of klas aan te maken. Waarmee wilt u beginnen?")
+        introduction.setWordWrap(True)
+        layout.addWidget(introduction)
+        for title, explanation, signal in (
+            ("CITO-analyseformulier uploaden", "Heeft u de CITO-analysetool in Excel ingevuld? Kies hier dat analyseformulier met de leerlingnamen, maximumscores en scores per vraag. Toetsvizier neemt deze gegevens over, zodat u niets opnieuw hoeft in te voeren. Daarna kunt u de gegevens controleren en aanpassen. Dit is het ingevulde analyseformulier, niet het bestand met de toetsvragen.", self.import_simple),
+            ("Zelf starten", "Vul het aantal vragen en leerlingen in. Na een korte uitleg begint u in de invoertabel. U kunt zelf typen of gegevens uit Excel plakken.", self.new_simple),
+            ("Analyse openen", "Ga verder met een eerder opgeslagen simpele analyse (.tviz). De vragen, scores en instellingen staan er nog in.", self.open_simple),
+        ):
+            card = QFrame()
+            card.setObjectName("panel")
+            card_layout = QVBoxLayout(card)
+            button = QPushButton(title)
+            button.clicked.connect(signal.emit)
+            card_layout.addWidget(button)
+            note = QLabel(explanation)
+            note.setWordWrap(True)
+            card_layout.addWidget(note)
+            layout.addWidget(card)
+        back = QPushButton("Terug naar het startscherm")
+        back.clicked.connect(self.back.emit)
+        layout.addWidget(back)
+        centered.addWidget(panel)
+        centered.addStretch()
+        scroll.setWidget(content)
+        root.addWidget(scroll)
+
+
 class StartPage(QWidget):
     new_subject = Signal()
     open_subject = Signal()
     last_subject = Signal()
     restore_backup = Signal()
+    new_simple = Signal()
+    import_simple = Signal()
+    open_simple = Signal()
 
     def __init__(self, settings: QSettings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.settings = settings
         outer = QVBoxLayout(self)
-        outer.addStretch()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        content = QWidget()
+        centered = QHBoxLayout(content)
+        centered.addStretch()
         panel = QFrame()
         panel.setObjectName("startPanel")
-        panel.setMaximumWidth(760)
+        panel.setMaximumWidth(1000)
         self.panel = panel
         layout = QVBoxLayout(panel)
         self.banner = QLabel()
         self.banner.setObjectName("brandBanner")
         self.banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.banner.setMinimumHeight(170)
+        self.banner.setMinimumHeight(120)
         layout.addWidget(self.banner)
-        new_button = QPushButton("Nieuw vak aanmaken")
-        new_button.clicked.connect(self.new_subject.emit)
-        open_button = QPushButton("Bestaand vak openen")
-        open_button.clicked.connect(self.open_subject.emit)
+        simple = QFrame()
+        simple.setObjectName("panel")
+        simple_layout = QVBoxLayout(simple)
+        simple_layout.addWidget(QLabel("<h2>Simpel</h2>"))
+        simple_note = QLabel("Eén losse toets invoeren, normeren en analyseren. Zonder vak- of klassenbeheer. Met een eigen analysebestand.")
+        simple_note.setWordWrap(True)
+        simple_layout.addWidget(simple_note)
+        simple_button = QPushButton("Simpel openen")
+        simple_button.clicked.connect(lambda: self.screens.setCurrentWidget(self.simple_menu))
+        simple_layout.addWidget(simple_button)
+        layout.addWidget(simple)
+        extended = QFrame()
+        extended.setObjectName("panel")
+        extended_layout = QVBoxLayout(extended)
+        extended_layout.addWidget(QLabel("<h2>Uitgebreid</h2>"))
+        extended_note = QLabel("Het volledige Toetsvizier: vakken, schooljaren, klassen, toetsversies en alle bestaande functies.")
+        extended_note.setWordWrap(True)
+        extended_layout.addWidget(extended_note)
+        buttons = QGridLayout()
         self.last_button = QPushButton("Laatste vak openen")
         self.last_button.clicked.connect(self.last_subject.emit)
-        restore_button = QPushButton("Back-up terugzetten")
-        restore_button.clicked.connect(self.restore_backup.emit)
+        for row, col, label, signal in ((0,0,"Nieuw vak aanmaken",self.new_subject),
+                                        (0,1,"Bestaand vak openen",self.open_subject),
+                                        (1,1,"Back-up terugzetten",self.restore_backup)):
+            button = QPushButton(label)
+            button.clicked.connect(signal.emit)
+            buttons.addWidget(button,row,col)
+        buttons.addWidget(self.last_button,1,0)
+        extended_layout.addLayout(buttons)
+        layout.addWidget(extended)
         help_button = QPushButton("Help bij dit scherm")
         help_button.clicked.connect(self.show_help_wizard)
-        layout.addWidget(new_button)
-        layout.addWidget(open_button)
-        layout.addWidget(self.last_button)
-        layout.addWidget(restore_button)
         layout.addWidget(help_button)
+        centered.addWidget(panel)
+        centered.addStretch()
+        scroll.setWidget(content)
+        self.screens = QStackedWidget()
+        self.screens.addWidget(scroll)
+        self.simple_menu = SimpleMenuPage(self)
+        self.simple_menu.new_simple.connect(self.new_simple.emit)
+        self.simple_menu.import_simple.connect(self.import_simple.emit)
+        self.simple_menu.open_simple.connect(self.open_simple.emit)
+        self.simple_menu.back.connect(lambda: self.screens.setCurrentWidget(scroll))
+        self.screens.addWidget(self.simple_menu)
+        outer.addWidget(self.screens)
         self.refresh()
-        row = QHBoxLayout()
-        row.addStretch()
-        row.addWidget(panel)
-        row.addStretch()
-        outer.addLayout(row)
-        outer.addStretch()
         self.update_banner()
 
     def refresh(self) -> None:
@@ -5045,6 +5177,12 @@ class StartPage(QWidget):
     def show_help_wizard(self) -> None:
         title = "Startscherm"
         steps = _enrich_help_steps(title, [
+            {
+                "title": "Simpel: één losse toets",
+                "text": "Klik bovenaan eerst op Simpel openen. Op het volgende scherm kiest u CITO-analyseformulier uploaden, Zelf starten of Analyse openen, met uitleg bij elke optie. Een simpele analyse gebruikt een eigen .tviz-bestand.",
+                "action": "Open Simpel en kies daarna bijvoorbeeld Zelf starten om het aantal vragen en leerlingen in te vullen.",
+                "tip": "De aantallen blijven boven de invoertabel bewerkbaar. Een lager aantal verbergt gegevens; een hoger aantal laat ze weer zien. De knop Uitleg beschrijft typen, plakken, 0 en N.",
+            },
             {
                 "title": "Nieuw vak aanmaken",
                 "text": "Een vakbestand is de lokale database waarin alle schooljaren, leerlingen, toetsen en analyses voor één vak worden bewaard.",
@@ -5072,7 +5210,7 @@ class StartPage(QWidget):
         ])
         HelpWizardDialog(
             title,
-            "Vanaf dit scherm opent u een bestaand vak of maakt u een nieuw vakbestand voor uw analyses.",
+            "Kies bovenaan Simpel voor één losse analyse, of onderaan Uitgebreid voor het volledige systeem met vakbestanden.",
             steps,
             faq=_build_help_faq(title, steps),
             screen_preview=self.grab(),
@@ -5096,6 +5234,9 @@ class MainWindow(QMainWindow):
         self.start.open_subject.connect(self.choose_subject)
         self.start.last_subject.connect(self.open_last_subject)
         self.start.restore_backup.connect(self.restore_backup)
+        self.start.new_simple.connect(self.create_simple)
+        self.start.import_simple.connect(self.import_cito_simple)
+        self.start.open_simple.connect(self.choose_simple)
         self.stack.addWidget(self.start)
         self.setCentralWidget(self.stack)
         geometry = self.settings.value("window_geometry")
@@ -5121,6 +5262,71 @@ class MainWindow(QMainWindow):
 
     def finish_start_update_check(self) -> None:
         self.update_thread = None
+
+    def create_simple(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Nieuwe simpele analyse")
+        form = QFormLayout(dialog)
+        form.addRow(QLabel("Kies de aantallen. U kunt ze later boven de invoertabel aanpassen."))
+        name = QLineEdit("Nieuwe analyse")
+        questions = QSpinBox()
+        questions.setRange(1,1000)
+        questions.setValue(10)
+        students = QSpinBox()
+        students.setRange(1,10000)
+        students.setValue(25)
+        form.addRow("Naam",name)
+        form.addRow("Aantal vragen",questions)
+        form.addRow("Aantal leerlingen",students)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Naar het invoerscherm")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Annuleren")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        form.addRow(buttons)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            from .simple_model import create_analysis
+            self.show_simple(create_analysis(questions.value(),name.text().strip() or "Nieuwe analyse",students.value()),explain=True)
+
+    def import_cito_simple(self) -> None:
+        path,_ = QFileDialog.getOpenFileName(self,"CITO-analyseformulier uploaden","","Excelbestand (*.xlsx *.xlsm)")
+        if not path:
+            return
+        try:
+            from .simple_model import import_cito
+            database = import_cito(path)
+        except Exception as error:
+            QMessageBox.warning(self,"CITO-bestand niet ingelezen",str(error))
+            return
+        self.show_simple(database,explain=True)
+
+    def choose_simple(self) -> None:
+        path,_ = QFileDialog.getOpenFileName(self,"Analyse openen","","Toetsvizier-analyse (*.tviz)")
+        if not path:
+            return
+        try:
+            from .simple_model import open_analysis
+            database = open_analysis(path)
+        except Exception as error:
+            QMessageBox.warning(self,"Analyse niet geopend",str(error))
+            return
+        self.show_simple(database)
+
+    def show_simple(self,database,explain=False) -> None:
+        from .simple_workspace import SimpleWorkspace
+        if self.database:
+            self.database.close()
+        self.database = database
+        workspace = SimpleWorkspace(database,self.settings)
+        workspace.back_to_start.connect(self.show_start)
+        if self.stack.count()>1:
+            old = self.stack.widget(1)
+            self.stack.removeWidget(old)
+            old.deleteLater()
+        self.stack.addWidget(workspace)
+        self.stack.setCurrentWidget(workspace)
+        if explain:
+            QTimer.singleShot(0,workspace.show_intro)
 
     def create_subject(self) -> None:
         dialog = NewSubjectDialog(self)
@@ -5180,6 +5386,10 @@ class MainWindow(QMainWindow):
             log_exception("Database kon niet worden geopend.")
             QMessageBox.critical(self, "Database kan niet worden geopend", str(error))
             return
+        if database.meta("document_kind", "") == "simple_analysis":
+            database.close()
+            QMessageBox.information(self,"Simpele analyse","Dit is een simpele analyse. Kies Analyse openen onder Simpel op het startscherm.")
+            return
         self.show_subject(database)
 
     def show_subject(self, database: SubjectDatabase) -> None:
@@ -5197,9 +5407,13 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(workspace)
 
     def show_start(self) -> None:
+        current = self.stack.currentWidget()
+        if hasattr(current,"release_views"):
+            current.release_views()
         if self.database:
             try:
-                self.database.backup(automatic=True)
+                if self.database.path.name != ":memory:":
+                    self.database.backup(automatic=True)
             except Exception:
                 log_exception("Automatische back-up bij sluiten van vak is mislukt.")
             self.database.close()
@@ -5208,10 +5422,17 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.start)
 
     def closeEvent(self, event) -> None:
+        current = self.stack.currentWidget()
+        if hasattr(current,"confirm_close") and not current.confirm_close():
+            event.ignore()
+            return
         self.settings.setValue("window_geometry", self.saveGeometry())
+        if hasattr(current,"release_views"):
+            current.release_views()
         if self.database:
             try:
-                self.database.backup(automatic=True)
+                if self.database.path.name != ":memory:":
+                    self.database.backup(automatic=True)
             except Exception:
                 log_exception("Automatische back-up bij afsluiten is mislukt.")
             self.database.close()

@@ -9,7 +9,7 @@ from typing import Any, Iterable
 from .paths import BACKUP_DIR
 
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 AUTO_BACKUP_KEEP_COUNT = 30
 AUTO_BACKUP_KEEP_DAYS = 14
 
@@ -205,6 +205,7 @@ CREATE TABLE IF NOT EXISTS matrix_questions (
     subquestion TEXT,
     maximum_score REAL NOT NULL CHECK (maximum_score >= 0),
     short_description TEXT,
+    shared_title TEXT NOT NULL DEFAULT '',
     expected_time_minutes REAL CHECK (expected_time_minutes IS NULL OR expected_time_minutes >= 0),
     is_multiple_choice INTEGER NOT NULL DEFAULT 0 CHECK (is_multiple_choice IN (0, 1)),
     multiple_choice_answer TEXT,
@@ -305,6 +306,64 @@ CREATE TABLE IF NOT EXISTS scores (
     response_text TEXT,
     PRIMARY KEY (attempt_id, question_id)
 );
+
+CREATE TABLE IF NOT EXISTS test_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    test_id INTEGER NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    normalization_json TEXT,
+    UNIQUE(test_id, name),
+    UNIQUE(test_id, id)
+);
+CREATE TABLE IF NOT EXISTS version_questions (
+    version_id INTEGER NOT NULL REFERENCES test_versions(id) ON DELETE CASCADE,
+    question_id INTEGER NOT NULL REFERENCES matrix_questions(id) ON DELETE CASCADE,
+    label TEXT NOT NULL CHECK(length(trim(label)) > 0),
+    answer TEXT,
+    alternatives_json TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY(version_id, question_id),
+    UNIQUE(version_id, label)
+);
+CREATE TABLE IF NOT EXISTS student_test_versions (
+    test_id INTEGER NOT NULL,
+    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    version_id INTEGER NOT NULL,
+    PRIMARY KEY(test_id, student_id),
+    FOREIGN KEY(test_id, version_id) REFERENCES test_versions(test_id, id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS question_alternative_references (
+    question_id INTEGER PRIMARY KEY REFERENCES matrix_questions(id) ON DELETE CASCADE,
+    version_id INTEGER NOT NULL REFERENCES test_versions(id) ON DELETE CASCADE
+);
+
+CREATE TRIGGER IF NOT EXISTS protect_version_question_deletion
+BEFORE DELETE ON matrix_questions
+WHEN EXISTS(SELECT 1 FROM tests WHERE id=OLD.test_id)
+ AND EXISTS(
+    SELECT 1 FROM version_questions vq
+    JOIN student_test_versions sv ON sv.version_id=vq.version_id
+    JOIN test_attempts a ON a.test_id=sv.test_id AND a.student_id=sv.student_id
+    JOIN scores s ON s.attempt_id=a.id
+    WHERE vq.question_id=OLD.id AND (s.score IS NOT NULL OR COALESCE(s.response_text,'')<>'')
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'Deze versie heeft resultaten. Wis die eerst voordat u vragen verwijdert.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS protect_version_question_structure
+BEFORE UPDATE OF maximum_score, is_multiple_choice ON matrix_questions
+WHEN (NEW.maximum_score<>OLD.maximum_score OR NEW.is_multiple_choice<>OLD.is_multiple_choice)
+ AND EXISTS(
+    SELECT 1 FROM version_questions vq
+    JOIN student_test_versions sv ON sv.version_id=vq.version_id
+    JOIN test_attempts a ON a.test_id=sv.test_id AND a.student_id=sv.student_id
+    JOIN scores s ON s.attempt_id=a.id
+    WHERE vq.question_id=OLD.id AND (s.score IS NOT NULL OR COALESCE(s.response_text,'')<>'')
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'Deze versie heeft resultaten. Alleen nummering en omschrijving kunnen worden aangepast.');
+END;
 
 CREATE TABLE IF NOT EXISTS report_exports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -475,6 +534,9 @@ class SubjectDatabase:
         def add_column(table: str, name: str, definition: str) -> None:
             if name not in columns(table):
                 self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
+
+        add_column("version_questions", "alternatives_json", "alternatives_json TEXT NOT NULL DEFAULT '{}'")
+        add_column("matrix_questions", "shared_title", "shared_title TEXT NOT NULL DEFAULT ''")
 
         test_columns = {
             row["name"] for row in self.connection.execute("PRAGMA table_info(tests)").fetchall()

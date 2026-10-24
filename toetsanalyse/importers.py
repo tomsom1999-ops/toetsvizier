@@ -361,6 +361,7 @@ def preview_results_import(
     test_id: int,
     rows: list[dict[str, str]],
     mapping: dict[str, object],
+    version_id: int | None = None,
 ) -> dict[str, object]:
     questions = {
         row["id"]: dict(row)
@@ -370,6 +371,9 @@ def preview_results_import(
             (test_id,),
         )
     }
+    if version_id is not None:
+        from .test_versions import mapped_questions
+        questions = {q["id"]: q for q in mapped_questions(database, test_id, version_id)}
     by_number = {}
     for row in database.rows("SELECT id, student_number_key, display_name FROM students"):
         if row["student_number_key"]:
@@ -410,6 +414,10 @@ def preview_results_import(
             if closest_name:
                 student_id = by_name.get(closest_name)
                 fuzzy_matches.append({"input": name_value, "matched_to": closest_name})
+        if version_id is not None and student_id is not None:
+            from .test_versions import student_version
+            if student_version(database, test_id, student_id) != version_id:
+                student_id = None
         if student_id is None:
             unknown_students += 1
             unknown_label = number_value or name_value or "(leeg)"
@@ -447,7 +455,11 @@ def import_results(
     rows: list[dict[str, str]],
     mapping: dict[str, object],
     allow_half_points: bool = False,
+    version_id: int | None = None,
 ) -> ResultImportSummary:
+    from .test_versions import versions, student_version
+    if versions(database, test_id) and version_id is None:
+        raise ResultImportError("Kies eerst een toetsversie.")
     by_number = {}
     for row in database.rows("SELECT id, student_number_key, display_name FROM students"):
         if row["student_number_key"]:
@@ -482,6 +494,9 @@ def import_results(
                 if override_target:
                     student_id = by_name.get(override_target)
             if student_id is None:
+                skipped_rows += 1
+                continue
+            if version_id is not None and student_version(database, test_id, student_id) != version_id:
                 skipped_rows += 1
                 continue
             raw_status = _text(row.get(str(status_column))) if status_column else ""

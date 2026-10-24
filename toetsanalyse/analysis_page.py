@@ -72,7 +72,7 @@ class AnalysisBridge(QObject):
         if test_id is None:
             return json.dumps({"ok": False, "message": "Selecteer eerst een toets."})
         try:
-            data = analysis_data(self.page.database, test_id)
+            data = analysis_data(self.page.database, test_id, version_id=self.page.version.currentData())
         except Exception as error:
             return json.dumps({"ok": False, "message": f"Het rapport kon niet worden voorbereid: {error}"})
         participants = list(data.get("participants", []))
@@ -213,6 +213,8 @@ class AnalysisPage(Page):
         self.test = QComboBox()
         self.test.setMinimumWidth(300)
         self.test.currentIndexChanged.connect(self.test_changed)
+        self.version = QComboBox()
+        self.version.currentIndexChanged.connect(self.load_dashboard)
         self.analysis_scope = QComboBox()
         self.analysis_scope.setMinimumWidth(260)
         self.analysis_scope.currentIndexChanged.connect(self.load_dashboard)
@@ -248,6 +250,7 @@ class AnalysisPage(Page):
         scope_layout.setSpacing(10)
         scope_layout.addWidget(QLabel("Analyse"))
         scope_layout.addWidget(self.analysis_scope)
+        scope_layout.addWidget(self.version)
         scope_layout.addStretch()
         self.analysis_scope_panel.setVisible(False)
         layout.addWidget(self.analysis_scope_panel)
@@ -278,7 +281,7 @@ class AnalysisPage(Page):
             return
         current_part_id = self.selected_analysis_part_id()
         try:
-            preview_data = analysis_data(self.database, int(test_id), analysis_part_id=current_part_id)
+            preview_data = analysis_data(self.database, int(test_id), analysis_part_id=current_part_id, version_id=self.version.currentData())
         except Exception as error:
             QMessageBox.warning(self, "Export niet mogelijk", f"De analyse kon niet worden voorbereid: {error}")
             return
@@ -295,7 +298,7 @@ class AnalysisPage(Page):
             return
         try:
             selected_part_id = dialog.selected_scope_part_id()
-            data = analysis_data(self.database, int(test_id), analysis_part_id=selected_part_id)
+            data = analysis_data(self.database, int(test_id), analysis_part_id=selected_part_id, version_id=self.version.currentData())
         except Exception as error:
             QMessageBox.warning(self, "Export niet mogelijk", f"De analyse kon niet worden voorbereid: {error}")
             return
@@ -450,6 +453,8 @@ class AnalysisPage(Page):
     def refresh_analysis_scope(self) -> None:
         selected = self.analysis_scope.currentData()
         test_id = self.test.currentData()
+        from .version_dialog import fill_version_combo
+        forms = fill_version_combo(self.version, self.database, test_id, combined=True)
         enabled = analysis_parts_enabled(self.database)
         self.analysis_scope.blockSignals(True)
         self.analysis_scope.clear()
@@ -468,7 +473,7 @@ class AnalysisPage(Page):
         index = self.analysis_scope.findData(selected)
         self.analysis_scope.setCurrentIndex(index if index >= 0 else 0)
         self.analysis_scope.blockSignals(False)
-        self.analysis_scope_panel.setVisible(enabled and bool(parts))
+        self.analysis_scope_panel.setVisible(bool(forms) or (enabled and bool(parts)))
 
     def select_test(self, test_id: int) -> None:
         for combo in (self.level_filter, self.grade_filter):
@@ -497,11 +502,15 @@ class AnalysisPage(Page):
             )
             return
         try:
-            data = analysis_data(self.database, test_id, analysis_part_id=self.selected_analysis_part_id())
+            data = analysis_data(self.database, test_id, analysis_part_id=self.selected_analysis_part_id(), version_id=self.version.currentData())
             if QWebEngineView is not None and isinstance(self.dashboard, QWebEngineView):
                 asset_directory = Path(__file__).parent / "assets"
+                dashboard_html = build_analysis_dashboard_html(data, "plotly-2.35.2.min.js")
+                if self.database.meta("document_kind", "") == "simple_analysis":
+                    from .simple_presentation import simplify_dashboard
+                    dashboard_html = simplify_dashboard(dashboard_html,"analysis",normalization_finalized=bool(data["normalization_finalized"]))
                 self.dashboard.setHtml(
-                    build_analysis_dashboard_html(data, "plotly-2.35.2.min.js"),
+                    dashboard_html,
                     QUrl.fromLocalFile(str(asset_directory.resolve()) + "/"),
                 )
                 self.set_dashboard_zoom(self.dashboard_zoom)

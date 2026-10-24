@@ -14,6 +14,199 @@ from .results import QUESTION_ORDER_SQL, is_not_made_score, normalize_multiple_c
 MIN_RELIABLE_ANALYSIS_PARTICIPANTS = 5
 
 
+def combined_version_analysis(database, test_id, analysis_part_id=None):
+    """Aggregate observed items; compare totals as percentages of each form."""
+    import copy
+    from .test_versions import versions, question_references, apply_alternative_map
+    forms = versions(database, test_id)
+    references = question_references(database,test_id)
+    datasets = [(form, analysis_data(database, test_id, include_resit=False,
+                                    analysis_part_id=analysis_part_id, version_id=form["id"])) for form in forms]
+    result = copy.deepcopy(datasets[0][1])
+    result["test"]["name"] = database.scalar("SELECT name FROM tests WHERE id=?", (test_id,)) + " — alle versies (scores in %)"
+    result["maximum_score"] = result["full_maximum_score"] = 100.0
+    participants = []
+    for form, data in datasets:
+        for source in data["participants"]:
+            participant = copy.deepcopy(source)
+            participant["version"] = form["name"]
+            participant["total_score"] = participant["score_percentage"]
+            participant["full_total_score"] = participant["full_score_percentage"]
+            participants.append(participant)
+    result["participants"] = participants
+    result["participant_count"] = len(participants)
+    result["incomplete_count"] = sum(data["incomplete_count"] for _, data in datasets)
+    result["normalization_finalized"] = all(data["normalization_finalized"] for _, data in datasets)
+    result["sample"]["is_small_group"] = len(participants) < MIN_RELIABLE_ANALYSIS_PARTICIPANTS
+    result["sample"]["message"] = (
+        f"{len(participants)} complete resultaten over {len(forms)} versies. "
+        "Totaalscores worden als percentage van de eigen versie weergegeven. "
+        "Bij elke vraag staat het aantal leerlingen met een ingevoerde score. "
+        "Betrouwbaarheid en meetfout bekijkt u per versie. "
+        "Rit/Rir gebruiken percentages van de eigen toetsversie."
+    )
+    totals = [p["total_score"] for p in participants]
+    grades = [p["grade"] for p in participants if p["grade"] is not None]
+    mode, count = _mode(totals)
+    result["summary"].update({
+        "mean_score": _average(totals), "median_score": statistics.median(totals) if totals else None,
+        "mode_score": mode, "mode_count": count,
+        "sd_score": statistics.stdev(totals) if len(totals) > 1 else None,
+        "highest_score": max(totals) if totals else None, "lowest_score": min(totals) if totals else None,
+        "mean_grade": _average(grades), "sd_grade": statistics.stdev(grades) if len(grades) > 1 else None,
+        "sufficient_percentage": sum(g >= 5.5 for g in grades) / len(grades) * 100 if grades else None,
+    })
+    originals = {int(q["id"]): dict(q) for q in database.rows("SELECT * FROM matrix_questions WHERE test_id=?", (test_id,))}
+    templates = {item["id"]: item for _, data in datasets for item in data["item_analysis"]}
+    items = []
+    for question_id, template in templates.items():
+        item = copy.deepcopy(template)
+        question = originals[question_id]
+        maximum = float(question["maximum_score"])
+        rows = database.rows(
+            "SELECT s.score FROM scores s JOIN test_attempts a ON a.id=s.attempt_id "
+            "JOIN student_test_versions stv ON stv.test_id=a.test_id AND stv.student_id=a.student_id "
+            "JOIN version_questions vq ON vq.version_id=stv.version_id AND vq.question_id=s.question_id "
+            "WHERE a.test_id=? AND s.question_id=? AND a.status='gemaakt' AND s.score IS NOT NULL",
+            (test_id, question_id))
+        values = [float(row["score"]) for row in rows]
+        pairs = []
+        for _, data in datasets:
+            form_maximum = data["maximum_score"]
+            for participant in data["participants"]:
+                if question_id in participant["scores"]:
+                    value = participant["scores"][question_id]
+                    rest_maximum = form_maximum - maximum
+                    pairs.append((value, participant["score_percentage"],
+                                  (participant["total_score"] - value) / rest_maximum * 100 if rest_maximum > 0 else None))
+        p_value = _average(values) / maximum if values and maximum else None
+        rit = _pearson([p[0] for p in pairs], [p[1] for p in pairs])
+        rest = [p for p in pairs if p[2] is not None]
+        rir = _pearson([p[0] for p in rest], [p[2] for p in rest])
+        labels = [f"{form['name']}: {row['label']}" for form in forms for row in database.rows(
+            "SELECT label FROM version_questions WHERE version_id=? AND question_id=?", (form["id"], question_id))]
+        item.update({"label": question["question_number"] + (question["subquestion"] or ""), "version_labels":labels,
+                     "display_label": " / ".join(labels), "participant_count": len(values),
+                     "p_value": p_value, "rit": rit, "rir": rir, "row_type": "question",
+                     "p_status": _metric_status("p", p_value), "rit_status": _metric_status("rit", rit),
+                     "rir_status": _metric_status("rir", rir), "status": _item_status(p_value, rit, rir)})
+        if question["shared_title"]:
+            item["title"] = question["shared_title"]
+            item["label"] = question["shared_title"]
+            item["display_label"] = question["shared_title"] + " — " + " / ".join(labels)
+        items.append(item)
+    result["item_analysis"] = items
+    result["question_group_analysis"] = items
+    result["question_count"] = len(items)
+    result["easy_items"] = sorted([item for item in items if item["p_value"] is not None], key=lambda i: i["p_value"], reverse=True)[:5]
+    result["difficult_items"] = sorted([item for item in items if item["p_value"] is not None], key=lambda i: i["p_value"])[:5]
+    for kind in ("alpha", "sem"):
+        result["quality"][kind] = {"value": None, "score_value": None, "status": _metric_status(kind, None)}
+    for kind, field in (("p_value", "p_value"), ("rit", "rit"), ("rir", "rir")):
+        value = _average([item[field] for item in items if item[field] is not None])
+        result["quality"][kind] = {"value": value, "status": _metric_status("p" if kind == "p_value" else kind, value)}
+    # Dimension percentages pool attainable points only for forms containing each category.
+    def merge_dimension(dimensions):
+        target = copy.deepcopy(dimensions[0][0])
+        buckets = {}
+        for dimension, n in dimensions:
+            for entry in dimension.get("entries", []):
+                possible = float(entry.get("maximum_points", 0)) * n
+                bucket = buckets.setdefault(entry["name"], [copy.deepcopy(entry), 0.0, 0.0])
+                bucket[1] += float(entry["percentage"]) / 100 * possible
+                bucket[2] += possible
+        target["entries"] = [dict(entry, percentage=achieved / possible * 100 if possible else 0.0)
+                             for entry, achieved, possible in buckets.values()]
+        return target
+    for key in result["groups"]:
+        dims = [(data["groups"][key], data["participant_count"]) for _, data in datasets if data["groups"].get(key)]
+        if dims:
+            result["groups"][key] = merge_dimension(dims)
+    keys = list(dict.fromkeys(dimension["key"] for _, data in datasets for dimension in data["group_dimensions"]))
+    result["group_dimensions"] = []
+    result["student_dimensions"] = []
+    for key in keys:
+        dims = [(dimension, data["participant_count"]) for _, data in datasets
+                for dimension in data["group_dimensions"] if dimension["key"] == key]
+        merged = merge_dimension(dims)
+        result["group_dimensions"].append(merged)
+        result["student_dimensions"].append({name: merged[name] for name in ("key", "title", "is_rtti", "kind")})
+    # Translate displayed letters to the canonical alternatives before pooling distractors.
+    import json
+    from collections import Counter
+    mc_items = []
+    for metric in items:
+        qid = metric["id"]
+        question = originals[qid]
+        if not question["is_multiple_choice"]:
+            continue
+        reference = references[qid]
+        reference_map = json.loads(reference["alternatives_json"])
+        to_reference = {canonical:letter for letter,canonical in reference_map.items()}
+        mappings = database.rows("SELECT vq.* FROM version_questions vq JOIN test_versions v ON v.id=vq.version_id WHERE v.test_id=? AND vq.question_id=?",(test_id,qid))
+        # Older letter-only configurations cannot be interpreted as content mappings.
+        if any(row["answer"] and row["answer"] != question["multiple_choice_answer"] and not json.loads(row["alternatives_json"]) for row in mappings):
+            for form,data in datasets:
+                for source in data["multiple_choice"]["items"]:
+                    if source["id"] == qid:
+                        source = copy.deepcopy(source)
+                        source["label"] = f"{form['name']}: {source['label']} (alternatieven nog niet gekoppeld)"
+                        mc_items.append(source)
+            continue
+        responses = database.rows(
+            "SELECT s.response_text,vq.alternatives_json FROM scores s JOIN test_attempts a ON a.id=s.attempt_id "
+            "JOIN student_test_versions sv ON sv.test_id=a.test_id AND sv.student_id=a.student_id "
+            "JOIN version_questions vq ON vq.version_id=sv.version_id AND vq.question_id=s.question_id "
+            "WHERE a.test_id=? AND s.question_id=? AND a.status='gemaakt' AND s.score IS NOT NULL",(test_id,qid))
+        counts = Counter()
+        not_made = 0
+        options = {to_reference.get(value,value) for row in mappings for value in json.loads(row["alternatives_json"]).values()}
+        for row in responses:
+            raw = str(row["response_text"] or "").strip().upper()
+            if is_not_made_score(raw):
+                not_made += 1
+                continue
+            option_map = json.loads(row["alternatives_json"])
+            canonical = option_map.get(raw,raw)
+            counts[to_reference.get(canonical,canonical) or "Leeg"] += 1
+        question = apply_alternative_map(question,reference)
+        accepted = _accepted_multiple_choice_answers(question)
+        options.update(counts)
+        options.update(letter for letter in accepted if letter != "Alle antwoorden")
+        n = sum(counts.values())
+        entries = [{"option":option,"count":counts[option],"percentage":counts[option]/n*100 if n else 0.0,
+                    "accepted":option in accepted or "Alle antwoorden" in accepted} for option in sorted(options)]
+        form_names = {form["id"]:form["name"] for form in forms}
+        for entry in entries:
+            canonical = reference_map.get(entry["option"],entry["option"])
+            entry["version_options"] = []
+            for mapping in mappings:
+                option_map = json.loads(mapping["alternatives_json"])
+                letter = next((letter for letter,value in option_map.items() if value == canonical),canonical)
+                entry["version_options"].append({"version":form_names[mapping["version_id"]],"option":letter})
+        mc_items.append({
+            **copy.deepcopy(metric), "label":metric["display_label"], "answer_key":question["multiple_choice_answer"],
+            "accepted_answers":accepted,"response_count":n,"not_made_count":not_made,
+            "reference_version":reference["version_name"],"reference_question":reference["label"],
+            "not_made_percentage":not_made/len(responses)*100 if responses else 0.0,
+            "correct_count":sum(entry["count"] for entry in entries if entry["accepted"]),
+            "responses":entries,"correction_enabled":bool(question["multiple_choice_correction_enabled"]),
+            "correction_mode":question["multiple_choice_correction_mode"],
+            "conclusion":_multiple_choice_conclusion(question,entries,metric["p_value"],metric["rit"],metric["rir"],not_made,len(responses)),
+        })
+    result["multiple_choice"]["items"] = mc_items
+    result["multiple_choice"]["summary"] = {
+        "question_count": len(mc_items),
+        "mean_p_value": _average([i["p_value"] for i in mc_items if i["p_value"] is not None]),
+        "mean_rit": _average([i["rit"] for i in mc_items if i["rit"] is not None]),
+        "mean_rir": _average([i["rir"] for i in mc_items if i["rir"] is not None]),
+        "attention_count": sum(i["conclusion"]["level"] in {"bad", "attention"} for i in mc_items),
+    }
+    result["resit_analysis"] = None
+    result["subtest_context"] = None
+    return result
+
+
 def _average(values: list[float]) -> float | None:
     return statistics.mean(values) if values else None
 
@@ -508,7 +701,21 @@ def analysis_data(
     test_id: int,
     include_resit: bool = True,
     analysis_part_id: int | None = None,
+    version_id: int | None = None,
 ) -> dict[str, object]:
+    from .test_versions import versions, project_version
+    forms = versions(database, test_id)
+    if forms:
+        if version_id is not None:
+            projected = project_version(database, test_id, version_id)
+            try:
+                result = analysis_data(projected, test_id, include_resit=False, analysis_part_id=analysis_part_id)
+                for item in result["item_analysis"]:
+                    item["participant_count"] = result["participant_count"]
+                return result
+            finally:
+                projected.close()
+        return combined_version_analysis(database, test_id, analysis_part_id)
     test_row = database.connection.execute(
         "SELECT t.id, t.name, t.level, t.grade_year, t.period, t.test_type, t.test_date, "
         "t.is_resit, t.original_test_id, sy.name AS school_year "
@@ -535,7 +742,7 @@ def analysis_data(
         dict(row)
         for row in database.rows(
             "SELECT id, question_number, subquestion, question_number || COALESCE(subquestion, '') AS label, "
-            "maximum_score, short_description, "
+            "maximum_score, short_description, shared_title, "
             "is_multiple_choice, multiple_choice_answer, multiple_choice_correction_enabled, "
             "multiple_choice_correction_mode, multiple_choice_extra_answers "
             f"FROM matrix_questions WHERE test_id=? ORDER BY {QUESTION_ORDER_SQL}",
@@ -669,7 +876,9 @@ def analysis_data(
             {
                 "id": question["id"],
                 "label": question["label"],
-                "display_label": f"Vraag {question['label']}",
+                "participant_count": len(values),
+                "display_label": f"Vraag {question['label']}" + (f" — {question['shared_title']}" if question["shared_title"] else ""),
+                "title": question["shared_title"],
                 "question_number": str(question["question_number"]),
                 "subquestion": question["subquestion"] or None,
                 "row_type": "subquestion" if question["subquestion"] else "question",

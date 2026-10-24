@@ -79,7 +79,7 @@ def _multiple_choice_score(question: dict, response_text: str | None) -> float |
     return maximum if response_text in accepted else 0.0
 
 
-def parse_score(raw_value: str, maximum_score: float, allow_half_points: bool = False) -> float | None:
+def parse_score(raw_value: str, maximum_score: float, allow_half_points: bool = False, score_step: float | None = None) -> float | None:
     value = raw_value.strip().replace(",", ".")
     if not value:
         return None
@@ -93,7 +93,10 @@ def parse_score(raw_value: str, maximum_score: float, allow_half_points: bool = 
         raise ResultValidationError("Een score kan niet negatief zijn.")
     if score > maximum_score:
         raise ResultValidationError(f"De score mag niet hoger zijn dan {maximum_score:g}.")
-    if allow_half_points:
+    if score_step is not None:
+        if score_step <= 0 or not math.isclose(score / score_step, round(score / score_step), abs_tol=1e-8):
+            raise ResultValidationError(f"Gebruik stappen van {score_step:g} punt.")
+    elif allow_half_points:
         if not math.isclose(score * 2, round(score * 2), rel_tol=0.0, abs_tol=1e-9):
             raise ResultValidationError("Alleen hele of halve punten zijn toegestaan.")
     elif not math.isclose(score, round(score), rel_tol=0.0, abs_tol=1e-9):
@@ -133,7 +136,7 @@ def test_questions(database: SubjectDatabase, test_id: int) -> list[dict]:
         dict(row)
         for row in database.rows(
             "SELECT id, question_number || COALESCE(subquestion, '') AS label, maximum_score, "
-            "short_description, expected_time_minutes, "
+            "short_description, shared_title, expected_time_minutes, "
             "is_multiple_choice, multiple_choice_answer, multiple_choice_correction_enabled, "
             "multiple_choice_correction_mode, multiple_choice_extra_answers "
             f"FROM matrix_questions WHERE test_id=? ORDER BY {QUESTION_ORDER_SQL}",
@@ -142,7 +145,7 @@ def test_questions(database: SubjectDatabase, test_id: int) -> list[dict]:
     ]
 
 
-def export_scores_xlsx(database: SubjectDatabase, test_id: int, output_path: str | Path) -> Path:
+def export_scores_xlsx(database: SubjectDatabase, test_id: int, output_path: str | Path, version_id: int | None = None) -> Path:
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Alignment, Font, PatternFill
@@ -162,6 +165,12 @@ def export_scores_xlsx(database: SubjectDatabase, test_id: int, output_path: str
 
     questions = test_questions(database, test_id)
     students = test_students(database, test_id)
+    from .test_versions import versions, mapped_questions, student_version
+    if versions(database, test_id):
+        if version_id is None:
+            raise ResultExportError("Kies een toetsversie voor de export.")
+        questions = mapped_questions(database, test_id, version_id)
+        students = [s for s in students if student_version(database, test_id, s["id"]) == version_id]
     attempts, scores, responses = stored_results(database, test_id)
     maximum = sum(float(question["maximum_score"]) for question in questions)
 
@@ -328,6 +337,7 @@ def save_score(
     allow_half_points: bool = False,
     *,
     commit: bool = True,
+    score_step: float | None = None,
 ) -> float | None:
     current_attempt = database.connection.execute(
         "SELECT id, status FROM test_attempts WHERE test_id=? AND student_id=?",
@@ -344,7 +354,15 @@ def save_score(
     )
     if not row:
         raise ResultValidationError("Deze vraag hoort niet meer bij de geselecteerde toets.")
-    question = row[0]
+    question = dict(row[0])
+    from .test_versions import versions, student_version
+    if versions(database, test_id):
+        version_id = student_version(database, test_id, student_id)
+        mapping = database.rows("SELECT * FROM version_questions WHERE version_id=? AND question_id=?", (version_id, question_id))
+        if not mapping:
+            raise ResultValidationError("Wijs eerst een versie toe; deze vraag moet in de versie van de leerling voorkomen.")
+        from .test_versions import apply_alternative_map
+        question = apply_alternative_map(question,dict(mapping[0]))
     maximum = float(question["maximum_score"])
     is_multiple_choice = bool(question["is_multiple_choice"])
     response_text = None
@@ -353,9 +371,14 @@ def save_score(
         score = 0.0
     elif is_multiple_choice:
         response_text = normalize_multiple_choice_response(raw_value)
+        if versions(database,test_id) and mapping:
+            import json
+            option_map = json.loads(mapping[0]["alternatives_json"])
+            if response_text is not None and option_map and response_text not in option_map:
+                raise ResultValidationError("Deze antwoordletter komt niet voor in de alternatieven van deze versie.")
         score = _multiple_choice_score(question, response_text)
     else:
-        score = parse_score(raw_value, maximum, allow_half_points=allow_half_points)
+        score = parse_score(raw_value, maximum, allow_half_points=allow_half_points, score_step=score_step)
     connection = database.connection
     try:
         if score is not None:
@@ -411,6 +434,8 @@ def save_score(
             "UPDATE test_attempts SET total_score=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
             (total, attempt["id"]),
         )
+        from .test_versions import refresh_version_grade
+        refresh_version_grade(database, test_id, student_id)
         if commit:
             connection.commit()
         return float(total) if total is not None else None
@@ -438,15 +463,22 @@ def regrade_multiple_choice_question(
     changed = 0
     try:
         rows = database.rows(
-            "SELECT s.attempt_id, s.score, s.response_text FROM scores s "
+            "SELECT a.student_id, s.attempt_id, s.score, s.response_text FROM scores s "
             "JOIN test_attempts a ON a.id=s.attempt_id "
             "WHERE a.test_id=? AND s.question_id=? AND s.response_text IS NOT NULL",
             (test_id, question_id),
         )
         affected_attempts: set[int] = set()
         for row in rows:
+            effective_question = dict(question)
+            from .test_versions import student_version
+            mapping = database.rows("SELECT * FROM version_questions WHERE version_id=? AND question_id=?",
+                                    (student_version(database, test_id, row["student_id"]), question_id))
+            if mapping:
+                from .test_versions import apply_alternative_map
+                effective_question = apply_alternative_map(effective_question,dict(mapping[0]))
             response = normalize_multiple_choice_response(str(row["response_text"] or ""))
-            new_score = 0.0 if response == "N" else _multiple_choice_score(question, response)
+            new_score = 0.0 if response == "N" else _multiple_choice_score(effective_question, response)
             old_score = float(row["score"]) if row["score"] is not None else None
             if (old_score is None) != (new_score is None) or (
                 old_score is not None
@@ -468,6 +500,9 @@ def regrade_multiple_choice_question(
                 "UPDATE test_attempts SET total_score=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                 (total, attempt_id),
             )
+            from .test_versions import refresh_version_grade
+            student_id = database.scalar("SELECT student_id FROM test_attempts WHERE id=?",(attempt_id,))
+            refresh_version_grade(database,test_id,student_id)
         connection.commit()
     except Exception:
         connection.rollback()

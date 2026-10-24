@@ -336,7 +336,7 @@ class ResultsImportDialog(QDialog):
             QMessageBox.warning(self, "Leerlingkoppeling ontbreekt", "Koppel minimaal leerlingnummer of naam.")
             return
         try:
-            checked = preview_results_import(self.database, self.test_id, self.rows, mapping)
+            checked = preview_results_import(self.database, self.test_id, self.rows, mapping, version_id=self.parent().version.currentData() if hasattr(self.parent(), "version") else None)
         except Exception as error:
             QMessageBox.warning(self, "Importcontrole mislukt", str(error))
             return
@@ -566,6 +566,10 @@ class ResultsPage(Page):
         self.test.setMinimumWidth(260)
         self.test.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.test.currentIndexChanged.connect(self.refresh_scores)
+        self.version = QComboBox()
+        self.version.currentIndexChanged.connect(self.refresh_scores)
+        self.version_manage = QPushButton("Versies / leerlingen")
+        self.version_manage.clicked.connect(self.manage_versions)
         self.level_filter = QComboBox()
         self.level_filter.setMinimumWidth(140)
         self.level_filter.currentIndexChanged.connect(self.refresh)
@@ -576,8 +580,8 @@ class ResultsPage(Page):
         self.direction.setMinimumWidth(210)
         self.direction.setMaximumWidth(250)
         self.direction.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.direction.addItem("Per leerling (horizontaal)", "horizontal")
-        self.direction.addItem("Per vraag (verticaal)", "vertical")
+        self.direction.addItem("Horizontaal (per leerling)", "horizontal")
+        self.direction.addItem("Verticaal (per vraag)", "vertical")
         self.direction.addItem("Gecombineerd", "hybrid")
         self.direction.currentIndexChanged.connect(self.update_vertical_direction_visibility)
         self.vertical_direction = QComboBox()
@@ -645,7 +649,7 @@ class ResultsPage(Page):
             make_page_header(
                 "Resultateninvoer",
                 "Voer scores in per leerling of per vraag. Niet-gemaakte rijen worden automatisch vergrendeld.",
-                [import_button, export_button, manage_keys_button],
+                [self.version_manage, import_button, export_button, manage_keys_button],
             )
         )
 
@@ -655,6 +659,7 @@ class ResultsPage(Page):
                 ("Niveau", self.level_filter),
                 ("Jaarlaag", self.grade_filter),
                 ("Toets", self.test),
+                ("Versie", self.version),
                 ("Klas/groep", self.class_filter),
                 ("Status", self.status_filter),
                 ("Invoerrichting", self.direction),
@@ -1056,8 +1061,8 @@ class ResultsPage(Page):
         heading.setWordWrap(True)
         header_row.addWidget(heading, 1)
         large_direction = QComboBox()
-        large_direction.addItem("Per leerling (horizontaal)", "horizontal")
-        large_direction.addItem("Per vraag (verticaal)", "vertical")
+        large_direction.addItem("Horizontaal (per leerling)", "horizontal")
+        large_direction.addItem("Verticaal (per vraag)", "vertical")
         large_direction.addItem("Gecombineerd", "hybrid")
         large_direction.setMinimumWidth(220)
         large_direction.setMaximumWidth(280)
@@ -1169,6 +1174,10 @@ class ResultsPage(Page):
     def refresh_scores(self) -> None:
         self.update_entry_visibility()
         test_id = self.test.currentData()
+        from .version_dialog import fill_version_combo
+        from .test_versions import mapped_questions, student_version
+        forms = fill_version_combo(self.version, self.database, test_id)
+        self.version_manage.setVisible(bool(forms))
         selected_class = self.class_filter.currentData()
         selected_status_filter = self.status_filter.currentData()
         self.loading = True
@@ -1179,8 +1188,12 @@ class ResultsPage(Page):
             self.question_header.set_active_column(-1)
         self.table.clear()
         self.questions = test_questions(self.database, test_id) if test_id is not None else []
+        if forms:
+            self.questions = mapped_questions(self.database, test_id, self.version.currentData())
         self.update_hybrid_question_ranges()
         self.all_students = test_students(self.database, test_id) if test_id is not None else []
+        if forms:
+            self.all_students = [s for s in self.all_students if student_version(self.database, test_id, s["id"]) == self.version.currentData()]
         class_names = sorted(
             {name for student in self.all_students for name in self.group_names(student.get("groups", ""))},
             key=str.lower,
@@ -1312,6 +1325,13 @@ class ResultsPage(Page):
         self.loading = False
         self.update_summary()
         self.set_save_state("saved")
+
+    def manage_versions(self) -> None:
+        from .version_dialog import VersionDialog
+        if self.test.currentData() is not None:
+            VersionDialog(self.database, self.test.currentData(), self).exec()
+            self.refresh_scores()
+            self.changed.emit()
 
     def update_hybrid_question_ranges(self) -> None:
         if not self.questions:
@@ -1964,6 +1984,7 @@ class ResultsPage(Page):
                 dialog.rows,
                 dialog.mapping(),
                 allow_half_points=self.half_points.isChecked(),
+                version_id=self.version.currentData(),
             )
         except Exception as error:
             QMessageBox.warning(self, "Import mislukt", str(error))
@@ -1987,7 +2008,7 @@ class ResultsPage(Page):
             QMessageBox.warning(self, "Geen vragen", "Deze toets heeft nog geen vragen in de toetsmatrijs.")
             return
         EXCEL_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-        suggested = EXCEL_EXPORT_DIR / f"{slug(self.test.currentText())}_scores.xlsx"
+        suggested = EXCEL_EXPORT_DIR / f"{slug(self.test.currentText() + ("_" + self.version.currentText() if self.version.currentData() is not None else ""))}_scores.xlsx"
         file_name, _ = QFileDialog.getSaveFileName(
             self,
             "Scores opslaan als Excel",
@@ -1999,7 +2020,7 @@ class ResultsPage(Page):
         if not file_name.lower().endswith(".xlsx"):
             file_name += ".xlsx"
         try:
-            output = export_scores_xlsx(self.database, int(test_id), file_name)
+            output = export_scores_xlsx(self.database, int(test_id), file_name, version_id=self.version.currentData())
         except ResultExportError as error:
             QMessageBox.warning(self, "Export mislukt", str(error))
             return

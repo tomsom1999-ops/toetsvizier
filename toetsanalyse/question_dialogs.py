@@ -177,6 +177,8 @@ class QuestionDialog(FormDialog):
     def accept(self) -> None:
         if not self.required(self.number, "een vraagnummer"):
             return
+        if hasattr(self,"version_fields") and not self.version_fields.validate():
+            return
         if not self.taxonomy_widgets:
             QMessageBox.warning(self, "Taxonomie ontbreekt", "Selecteer eerst minimaal een taxonomie bij de toets.")
             return

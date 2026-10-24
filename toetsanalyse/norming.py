@@ -386,6 +386,10 @@ def save_normalization(database: SubjectDatabase, test_id: int, settings: dict[s
     except Exception:
         connection.rollback()
         raise
+    from .test_versions import persist_normalization
+    persist_normalization(database, test_id, configuration)
+    from .simple_model import persist_norming
+    persist_norming(database)
     return SavedNormalization(method, configuration, decimal_places, rounding_method)
 
 
@@ -401,3 +405,7 @@ def remove_normalization(database: SubjectDatabase, test_id: int) -> None:
     except Exception:
         connection.rollback()
         raise
+    from .test_versions import persist_normalization
+    persist_normalization(database, test_id, None)
+    from .simple_model import persist_norming
+    persist_norming(database)

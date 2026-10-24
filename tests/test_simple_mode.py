@@ -1,0 +1,412 @@
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from toetsanalyse.simple_model import (create_analysis, save_as, open_analysis, set_counts,
+    active_questions, active_students, completion, project_active, import_cito)
+from toetsanalyse.results import save_score, stored_results, test_questions
+from toetsanalyse.norming import save_normalization, has_active_normalization
+from toetsanalyse.analysis import analysis_data
+
+
+class SimpleModeTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.db = create_analysis(3, "Testanalyse", 2)
+
+    def tearDown(self):
+        self.db.close()
+        self.temp.cleanup()
+
+    def fill(self):
+        with self.db.connection:
+            self.db.connection.execute("UPDATE matrix_questions SET maximum_score=2 WHERE test_id=1")
+            for student in active_students(self.db):
+                for q in active_questions(self.db):
+                    save_score(self.db, 1, student["id"], q["id"], "N" if q["label"] == "3" else "0" if q["label"] == "2" else "2", commit=False)
+
+    def qt(self):
+        try:
+            from PySide6.QtWidgets import QApplication
+        except ModuleNotFoundError:
+            self.skipTest("PySide6 ontbreekt")
+        self.app = QApplication.instance() or QApplication([])
+
+    def test_counts_hide_and_restore_data_including_saved_file(self):
+        self.fill()
+        old = stored_results(self.db, 1)
+        with self.db.connection:
+            set_counts(self.db, 1, 1)
+        self.assertEqual(1, len(active_questions(self.db)))
+        self.assertEqual(1, len(active_students(self.db)))
+        self.assertEqual(old, stored_results(self.db, 1))
+        path = Path(self.temp.name) / "analyse.tviz"
+        save_as(self.db, path)
+        reopened = open_analysis(path)
+        try:
+            with reopened.connection:
+                set_counts(reopened, 3, 2)
+            self.assertEqual(old, stored_results(reopened, 1))
+            self.assertEqual(3, len(active_questions(reopened)))
+            self.assertEqual(2, len(active_students(reopened)))
+        finally:
+            reopened.close()
+
+    def test_projection_only_analyses_active_data_and_persists_norm(self):
+        self.fill()
+        with self.db.connection:
+            set_counts(self.db, 1, 1)
+        projected = project_active(self.db)
+        try:
+            result = analysis_data(projected, 1)
+            self.assertEqual(1, result["participant_count"])
+            self.assertEqual(1, result["question_count"])
+            self.assertEqual(2, result["maximum_score"])
+            self.assertEqual(2, result["participants"][0]["total_score"])
+            save_normalization(projected, 1, {"method": "n_term", "n_term": 1.0})
+            self.assertTrue(has_active_normalization(self.db, 1))
+        finally:
+            projected.close()
+        self.assertEqual(3, len(test_questions(self.db, 1)))
+        self.assertEqual(6, self.db.scalar("SELECT COUNT(*) FROM scores"))
+
+    def test_modules_require_all_active_scores_but_zero_and_n_count(self):
+        self.assertFalse(completion(self.db)["ready"])
+        self.fill()
+        self.assertTrue(completion(self.db)["ready"])
+        sid = active_students(self.db)[0]["id"]
+        qid = active_questions(self.db)[0]["id"]
+        save_score(self.db, 1, sid, qid, "")
+        self.assertFalse(completion(self.db)["ready"])
+        self.assertEqual(1, len(completion(self.db)["missing"]))
+
+    def test_wrong_file_kind_is_rejected_before_any_migration(self):
+        from toetsanalyse.database import SubjectDatabase
+        path = Path(self.temp.name) / "vak.db"
+        other = SubjectDatabase.create(path, "Vak", "2026")
+        other.close()
+        original = path.read_bytes()
+        with self.assertRaises(ValueError):
+            open_analysis(path)
+        self.assertEqual(original, path.read_bytes())
+
+    def test_clipboard_names_scores_zero_n_undo_and_autosave(self):
+        self.qt()
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QApplication
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        settings = QSettings(str(Path(self.temp.name) / "settings.ini"), QSettings.Format.IniFormat)
+        workspace = SimpleWorkspace(self.db, settings)
+        workspace.table.setCurrentCell(0, 1)
+        QApplication.clipboard().setText("2\t2\t2")
+        workspace.paste()
+        workspace.table.setCurrentCell(1, 0)
+        QApplication.clipboard().setText("Sam\t2\t0\tN\nAlex\t1\t2\t2")
+        workspace.paste()
+        self.assertTrue(workspace.norm_button.isEnabled())
+        self.assertTrue(workspace.analysis_button.isEnabled())
+        self.assertEqual("Sam", active_students(self.db)[0]["display_name"])
+        path = Path(self.temp.name) / "saved.tviz"
+        save_as(self.db, path)
+        workspace.edit_cells([(1, 1, "1")])
+        workspace.undo()
+        reopened = open_analysis(path)
+        try:
+            sid = active_students(reopened)[0]["id"]
+            qid = active_questions(reopened)[0]["id"]
+            self.assertEqual(2, stored_results(reopened, 1)[1][sid, qid])
+        finally:
+            reopened.close()
+        workspace.question_count.setValue(1)
+        workspace.student_count.setValue(1)
+        workspace.change_counts()
+        self.assertEqual(1, len(workspace.questions))
+        workspace.question_count.setValue(3)
+        workspace.student_count.setValue(2)
+        workspace.change_counts()
+        self.assertEqual("N", workspace.table.item(1, 3).text())
+        self.assertEqual("Alex", workspace.table.item(2, 0).text())
+        workspace.close()
+
+    def test_invalid_paste_is_atomic_and_blocks_modules_until_corrected(self):
+        self.qt()
+        self.fill()
+        from PySide6.QtCore import QSettings
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        workspace = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / "s.ini"), QSettings.Format.IniFormat))
+        before = stored_results(self.db, 1)
+        self.assertFalse(workspace.edit_cells([(1, 1, "1"), (1, 2, "9")]))
+        self.assertEqual(before, stored_results(self.db, 1))
+        self.assertFalse(workspace.analysis_button.isEnabled())
+        self.assertTrue(workspace.undo_button.isEnabled())
+        workspace.undo()
+        self.assertTrue(workspace.analysis_button.isEnabled())
+        workspace.close()
+
+    def test_metadata_categories_and_multiple_choice_survive_hidden_columns(self):
+        self.qt()
+        from toetsanalyse.simple_dialogs import MetadataDialog
+        self.fill()
+        dialog = MetadataDialog(self.db)
+        dialog.definitions.append({"name": "Mijn indeling", "standard": False, "values": ["Een", "Twee"]})
+        dialog.build()
+        qid = active_questions(self.db)[2]["id"]
+        dialog.combos[qid, "Mijn indeling"].setCurrentText("Twee")
+        with self.db.connection:
+            dialog.apply()
+            self.db.connection.execute("UPDATE matrix_questions SET is_multiple_choice=1,multiple_choice_answer='A' WHERE id=?", (qid,))
+            set_counts(self.db, 1, 1)
+        visible = MetadataDialog(self.db)
+        with self.db.connection:
+            visible.apply()
+            set_counts(self.db, 3, 2)
+        self.assertEqual("Twee", self.db.scalar("SELECT v.name FROM question_taxonomy_values q JOIN taxonomy_values v ON v.id=q.taxonomy_value_id WHERE q.question_id=?", (qid,)))
+        self.assertEqual("A", self.db.scalar("SELECT multiple_choice_answer FROM matrix_questions WHERE id=?", (qid,)))
+        dialog.close()
+        visible.close()
+
+    def test_dynamic_cito_import_skips_unused_rows_and_keeps_blanks(self):
+        try:
+            from openpyxl import Workbook
+        except ModuleNotFoundError:
+            self.skipTest("openpyxl ontbreekt")
+        workbook = Workbook()
+        reference = workbook.active
+        reference.title = "Referentie"
+        reference["C8"] = 2
+        reference["C10"] = "hele"
+        data = workbook.create_sheet("Gegevens")
+        data["E4"] = "Max. score:"
+        for col in (6, 7):
+            data.cell(2, col, col - 5)
+            data.cell(3, col, f'=IF(1=1,{col - 5},"")')
+            data.cell(4, col, 3)
+        data["B6"], data["F6"], data["G6"] = "Sam", 0, 3
+        data["B7"] = "Afwezig"
+        data["B8"], data["F8"] = "Alex", 1
+        data["B107"] = "Gem. Toetsscore:"
+        path = Path(self.temp.name) / "CITO.xlsx"
+        workbook.save(path)
+        workbook.close()
+        original = path.read_bytes()
+        imported = import_cito(path)
+        try:
+            self.assertEqual(2, len(active_questions(imported)))
+            self.assertEqual(2, len(active_students(imported)))
+            self.assertEqual(1, len(completion(imported)["missing"]))
+            self.assertEqual(0, min(stored_results(imported, 1)[1].values()))
+        finally:
+            imported.close()
+        self.assertEqual(original, path.read_bytes())
+
+    def test_excel_export_only_contains_active_data_and_preserves_letters(self):
+        try:
+            from openpyxl import load_workbook
+        except ModuleNotFoundError:
+            self.skipTest("openpyxl ontbreekt")
+        from toetsanalyse.simple_workspace import export_simple_excel
+        self.fill()
+        with self.db.connection:
+            set_counts(self.db, 2, 1)
+        path = Path(self.temp.name) / "scores.xlsx"
+        export_simple_excel(self.db, path)
+        workbook = load_workbook(path, data_only=True)
+        try:
+            rows = list(workbook["Scores"].values)
+            self.assertEqual(3, len(rows))
+            self.assertEqual(4, len(rows[0]))
+            self.assertEqual([2, 0, 2], list(rows[2][1:]))
+        finally:
+            workbook.close()
+
+    def test_native_enter_navigation_horizontal_and_vertical(self):
+        self.qt()
+        self.fill()
+        from PySide6.QtCore import QSettings, Qt
+        from PySide6.QtTest import QTest
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        workspace = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / "keys.ini"), QSettings.Format.IniFormat))
+        workspace.show()
+        self.app.processEvents()
+        for mode, expected in (("horizontal", (1, 2)), ("vertical", (2, 1))):
+            workspace.direction.setCurrentIndex(workspace.direction.findData(mode))
+            workspace.table.setCurrentCell(1, 1)
+            workspace.table.setFocus()
+            QTest.keyClick(workspace.table, Qt.Key.Key_F2)
+            QTest.keyClicks(workspace.table.focusWidget(), "1")
+            QTest.keyClick(workspace.table.focusWidget(), Qt.Key.Key_Return)
+            self.app.processEvents()
+            self.assertEqual(expected, (workspace.table.currentRow(), workspace.table.currentColumn()))
+        workspace.direction.setCurrentIndex(workspace.direction.findData("hybrid"))
+        workspace.block_size.setValue(2)
+        workspace.advance(1, 3)
+        self.assertEqual((2, 3), (workspace.table.currentRow(), workspace.table.currentColumn()))
+        workspace.close()
+
+    def test_open_modules_with_hidden_data_and_return_to_input(self):
+        self.qt()
+        self.fill()
+        from PySide6.QtCore import QSettings
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        workspace = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / "modules.ini"), QSettings.Format.IniFormat))
+        workspace.question_count.setValue(1)
+        workspace.student_count.setValue(1)
+        workspace.change_counts()
+        for module in ("norm", "analysis"):
+            workspace.open_module(module)
+            self.assertIsNot(workspace.input, workspace.stack.currentWidget())
+            self.assertEqual(1, len(test_questions(workspace.projection, 1)))
+            self.assertEqual(1, analysis_data(workspace.projection, 1)["participant_count"])
+            workspace.show_input()
+        workspace.release_views()
+        workspace.close()
+
+    def test_analysis_is_orange_until_norming_and_updates_immediately(self):
+        self.qt()
+        self.fill()
+        import json
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QMessageBox
+        from toetsanalyse.app import NormingBridge
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        from toetsanalyse.simple_presentation import simplify_dashboard
+        workspace = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / "norm-state.ini"), QSettings.Format.IniFormat))
+        self.assertTrue(workspace.analysis_button.isEnabled())
+        self.assertTrue(workspace.analysis_button.property("partial_analysis"))
+        self.assertIn("#d97706", workspace.analysis_button.styleSheet())
+        self.assertIn("cijferafhankelijke", workspace.status.text())
+        workspace.open_module("analysis")
+        data = analysis_data(workspace.projection, 1)
+        self.assertFalse(data["normalization_finalized"])
+        self.assertTrue(all(p["grade"] is None for p in data["participants"]))
+        workspace.open_module("norm")
+        bridge = NormingBridge(workspace.active_page)
+        result = json.loads(bridge.finalizeNormalization(json.dumps({"method": "n_term", "n_term": 1.0})))
+        self.assertTrue(result["ok"])
+        self.assertFalse(workspace.analysis_button.property("partial_analysis"))
+        self.assertEqual("", workspace.analysis_button.styleSheet())
+        with patch("toetsanalyse.simple_widgets.question", return_value=QMessageBox.StandardButton.Yes):
+            self.assertTrue(json.loads(bridge.removeNormalization())["ok"])
+        self.assertTrue(workspace.analysis_button.property("partial_analysis"))
+        without_norm = simplify_dashboard("<head></head><body></body>", "analysis")
+        with_norm = simplify_dashboard("<head></head><body></body>", "analysis", normalization_finalized=True)
+        self.assertIn('<div class="simple-guide simple-no-norm">', without_norm)
+        self.assertNotIn('<div class="simple-guide simple-no-norm">', with_norm)
+        self.assertIn("Groepsniveau gaat over de deelnemers", without_norm)
+        workspace.release_views()
+        workspace.close()
+
+    def test_guided_help_topics_examples_navigation_and_skip(self):
+        self.qt()
+        from PySide6.QtWidgets import QDialog
+        from toetsanalyse.simple_help import InputIntroduction, TOPICS
+        guide = InputIntroduction()
+        guide.show()
+        self.app.processEvents()
+        self.assertEqual(7, guide.topic.count())
+        self.assertFalse(guide.previous.isEnabled())
+        guide.next_button.click()
+        self.assertEqual(1, guide.topic.currentIndex())
+        guide.topic.setCurrentIndex(3)
+        self.app.processEvents()
+        scores_start = guide.demo.highlights()[0].x()
+        guide.variant.setCurrentIndex(1)
+        self.assertLess(guide.demo.highlights()[0].x(), scores_start)
+        guide.topic.setCurrentIndex(4)
+        guide.variant.setCurrentIndex(1)
+        start, end = guide.demo.arrows()[0]
+        self.assertEqual(start.x(), end.x())
+        self.assertGreater(end.y(), start.y())
+        guide.topic.setCurrentIndex(6)
+        self.assertIn("automatisch", guide.text.text())
+        self.assertTrue(guide.next_button.isEnabled())
+        self.assertFalse(guide.skip.isChecked())
+        guide.skip_button.click()
+        self.assertEqual(QDialog.DialogCode.Accepted, guide.result())
+        self.assertFalse(guide.skip.isChecked())
+
+    def test_hybrid_toolbar_fits_small_window(self):
+        self.qt()
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QPushButton
+        from toetsanalyse.app import STYLESHEET
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        previous_style = self.app.styleSheet()
+        self.app.setStyleSheet(STYLESHEET)
+        workspace = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / "layout.ini"), QSettings.Format.IniFormat))
+        try:
+            workspace.direction.setCurrentIndex(workspace.direction.findData("hybrid"))
+            workspace.resize(980, 640)
+            workspace.show()
+            self.app.processEvents()
+            self.assertLessEqual(workspace.width(), 980)
+            self.assertLessEqual(workspace.minimumSizeHint().width(), 980)
+            for button in workspace.input.findChildren(QPushButton):
+                if button.isVisible():
+                    self.assertLessEqual(button.mapTo(workspace, button.rect().topRight()).x(), workspace.width())
+        finally:
+            workspace.close()
+            self.app.setStyleSheet(previous_style)
+
+    def test_settings_table_controls_fit_rows_and_use_dutch_buttons(self):
+        self.qt()
+        from PySide6.QtWidgets import QDialogButtonBox, QTableWidget
+        from toetsanalyse.app import STYLESHEET
+        from toetsanalyse.simple_dialogs import MetadataDialog, MultipleChoiceDialog
+        previous_style = self.app.styleSheet()
+        self.app.setStyleSheet(STYLESHEET)
+        try:
+            for dialog in (MetadataDialog(self.db), MultipleChoiceDialog(self.db)):
+                dialog.show()
+                self.app.processEvents()
+                table = dialog.findChild(QTableWidget)
+                for row in range(table.rowCount()):
+                    for column in range(table.columnCount()):
+                        control = table.cellWidget(row, column)
+                        if control is not None:
+                            self.assertGreaterEqual(table.rowHeight(row), control.minimumSizeHint().height() + 1)
+                buttons = dialog.findChild(QDialogButtonBox)
+                self.assertEqual("Opslaan", buttons.button(QDialogButtonBox.StandardButton.Save).text())
+                self.assertEqual("Annuleren", buttons.button(QDialogButtonBox.StandardButton.Cancel).text())
+                dialog.close()
+        finally:
+            self.app.setStyleSheet(previous_style)
+
+    def test_simple_options_and_explanations_only_appear_after_opening_mode(self):
+        self.qt()
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QPushButton, QLabel
+        from PySide6.QtTest import QSignalSpy
+        from toetsanalyse.app import StartPage
+        start = StartPage(QSettings(str(Path(self.temp.name) / "start.ini"), QSettings.Format.IniFormat))
+        buttons = {button.text(): button for button in start.findChildren(QPushButton)}
+        for name in ("Simpel openen", "CITO-analyseformulier uploaden", "Zelf starten", "Analyse openen", "Nieuw vak aanmaken", "Bestaand vak openen"):
+            self.assertIn(name, buttons)
+        start.show()
+        self.app.processEvents()
+        labels = {label.text(): label for label in start.findChildren(QLabel)}
+        self.assertLess(labels['<h2>Simpel</h2>'].mapTo(start, labels['<h2>Simpel</h2>'].rect().topLeft()).y(),
+                        labels['<h2>Uitgebreid</h2>'].mapTo(start, labels['<h2>Uitgebreid</h2>'].rect().topLeft()).y())
+        self.assertTrue(buttons["Simpel openen"].isVisible())
+        for name in ("CITO-analyseformulier uploaden", "Zelf starten", "Analyse openen"):
+            self.assertFalse(buttons[name].isVisible())
+        buttons["Simpel openen"].click()
+        self.app.processEvents()
+        self.assertFalse(buttons["Bestaand vak openen"].isVisible())
+        for name in ("CITO-analyseformulier uploaden", "Zelf starten", "Analyse openen"):
+            self.assertTrue(buttons[name].isVisible())
+        spy = QSignalSpy(start.new_simple)
+        buttons["Zelf starten"].click()
+        self.assertEqual(1, spy.count())
+        self.assertTrue(any("analyseformulier met de leerlingnamen" in label.text() for label in start.simple_menu.findChildren(QLabel)))
+        buttons["Terug naar het startscherm"].click()
+        self.assertTrue(buttons["Simpel openen"].isVisible())
+        start.close()
+
+
+if __name__ == "__main__":
+    unittest.main()

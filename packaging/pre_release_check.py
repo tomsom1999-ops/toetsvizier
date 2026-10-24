@@ -32,6 +32,7 @@ PROTECTED_PACKAGE_SUFFIXES = (
     ".db",
     ".sqlite",
     ".sqlite3",
+    ".tviz",
     ".xlsx",
     ".xls",
     ".xlsm",

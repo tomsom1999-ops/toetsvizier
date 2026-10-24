@@ -31,6 +31,7 @@ DEFAULT_EXCLUDES = (
     "*.db",
     "*.sqlite",
     "*.sqlite3",
+    "*.tviz",
     "*.xlsx",
     "*.xls",
     "*.xlsm",
@@ -43,6 +44,7 @@ DEFAULT_EXCLUDES = (
 )
 
 DIST_EXCLUDES = (
+    "*.tviz",
     ".git/**",
     ".agents/**",
     ".codex_tmp/**",

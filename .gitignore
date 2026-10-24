@@ -18,6 +18,7 @@ config/
 *.db
 *.sqlite
 *.sqlite3
+*.tviz
 *.xlsx
 *.xls
 *.xlsm

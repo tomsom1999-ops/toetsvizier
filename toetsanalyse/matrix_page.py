@@ -287,6 +287,8 @@ class MatrixPage(Page):
         )
         split_remove.clicked.connect(self.remove_analysis_split)
         self.analysis_split_remove_button = split_remove
+        self.version_button = QPushButton("Toetsversies beheren")
+        self.version_button.clicked.connect(self.open_versions)
         report = compact_action_button(
             set_button_role(QPushButton("Matrijsrapport"), "secondary"),
             "Genereer de grafische toetsmatrijs met verdelingen.",
@@ -297,7 +299,7 @@ class MatrixPage(Page):
             make_page_header(
                 "Vragenoverzicht",
                 "Kies een toets en beheer vragen, subvragen, punten, taxonomieën en vraagclassificaties.",
-                [report, split_analysis, split_remove, add_from_database, add_to_database, delete, edit, add],
+                [report, self.version_button, split_analysis, split_remove, add_from_database, add_to_database, delete, edit, add],
             )
         )
         content_layout.addWidget(
@@ -528,6 +530,8 @@ class MatrixPage(Page):
 
     def refresh_questions(self) -> None:
         test_id = self.test.currentData()
+        from .test_versions import versions
+        self.version_button.setVisible(bool(versions(self.database, test_id)))
         self.update_analysis_split_visibility()
         has_test = test_id is not None
         self.empty_state.setVisible(not has_test)
@@ -553,7 +557,7 @@ class MatrixPage(Page):
         )
         rows = self.database.rows(
             "SELECT id, question_number, subquestion, question_number || COALESCE(subquestion, '') AS label, "
-            "maximum_score, short_description, expected_time_minutes, is_multiple_choice, multiple_choice_answer, "
+            "maximum_score, short_description, shared_title, expected_time_minutes, is_multiple_choice, multiple_choice_answer, "
             "question_bank_id FROM matrix_questions WHERE test_id=? "
             "ORDER BY CAST(question_number AS INTEGER), question_number, COALESCE(subquestion, '')",
             (test_id,),
@@ -568,6 +572,8 @@ class MatrixPage(Page):
         total_time = 0.0
         timed_questions = 0
         part_names_by_question = self.analysis_part_names_by_question(test_id) if show_analysis_parts else {}
+        from .test_versions import question_references, apply_alternative_map
+        alternative_references = question_references(self.database,test_id) if test_id else {}
         for row_number, row in enumerate(rows):
             total_points += float(row["maximum_score"])
             if row["expected_time_minutes"] is not None:
@@ -584,9 +590,15 @@ class MatrixPage(Page):
                 seen_groups.add(group_key)
             else:
                 label_text = f"Vraag {row['question_number']}"
+            if row["shared_title"]:
+                label_text = row["shared_title"] + "\n" + label_text
             answer_key = "-"
             if row["is_multiple_choice"]:
                 answer_key = str(row["multiple_choice_answer"] or "").strip().upper() or "Ontbreekt"
+                if row["id"] in alternative_references:
+                    reference = alternative_references[row["id"]]
+                    effective = apply_alternative_map(dict(row),reference)
+                    answer_key = f"{effective['multiple_choice_answer']} (alternatieven volgens {reference['version_name']})"
             values = (
                 label_text,
                 group_text,
@@ -930,6 +942,15 @@ class MatrixPage(Page):
                     (question_id, property_id),
                 )
 
+    def open_versions(self) -> None:
+        from .version_dialog import VersionDialog
+        test_id = self.test.currentData()
+        if test_id is None:
+            return
+        VersionDialog(self.database, test_id, self).exec()
+        self.refresh_questions()
+        self.changed.emit()
+
     def add_question(self) -> None:
         test_id = self.test.currentData()
         if test_id is None:
@@ -943,6 +964,10 @@ class MatrixPage(Page):
             return
         properties = self.properties(test_id)
         dialog = QuestionDialog(properties, taxonomies, parent=self, default_number=self.next_question_number(test_id))
+        from .test_versions import versions
+        from .version_dialog import NewQuestionVersionFields
+        version_fields = NewQuestionVersionFields(self.database, test_id, dialog) if versions(self.database, test_id) else None
+        old_ids = {row["id"] for row in self.database.rows("SELECT id FROM matrix_questions WHERE test_id=?", (test_id,))}
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         try:
@@ -990,6 +1015,9 @@ class MatrixPage(Page):
                     )
                     return
                 self.insert_question_entry(test_id, entry)
+            if version_fields is not None:
+                new_ids = {row["id"] for row in self.database.rows("SELECT id FROM matrix_questions WHERE test_id=?", (test_id,))} - old_ids
+                version_fields.save(new_ids)
             self.database.connection.commit()
         except Exception as error:
             self.database.connection.rollback()

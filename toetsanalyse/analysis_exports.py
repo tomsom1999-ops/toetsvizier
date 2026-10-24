@@ -196,7 +196,7 @@ def _item_rows(items: list[dict[str, Any]], child: bool = False) -> str:
         rows.append(
             f"""
             <tr class="{'child-row' if child else ''}">
-              <td>{_esc(label)}</td>
+              <td>{_esc(label)}<br><small>{_esc(item.get("participant_count", "—"))} leerlingen</small></td>
               <td>{_esc(item.get('description') or '-')}</td>
               <td class="num">{_num(item.get('maximum_score'), 1)}</td>
               <td class="num">{_num(item.get('p_value'), 2)}</td>
@@ -241,7 +241,7 @@ def _multiple_choice_section(data: dict[str, Any]) -> str:
         total = sum(int(response.get("count") or 0) for response in responses) or 1
         bars = "".join(
             _bar(
-                response.get("option"),
+                str(response.get("option")) + (" (" + ", ".join(f"{link['version']}: {link['option']}" for link in response["version_options"]) + ")" if response.get("version_options") else ""),
                 int(response.get("count") or 0) / total * 100,
                 f" · {int(response.get('count') or 0)}x",
                 "accepted" if response.get("accepted") else "",
@@ -259,6 +259,7 @@ def _multiple_choice_section(data: dict[str, Any]) -> str:
               </div>
               <div class="mc-meta">
                 <span>Sleutel: <b>{_esc(item.get('answer_key') or '-')}</b></span>
+                {('<span>Leidende alternatiefletters: <b>versie ' + _esc(item['reference_version']) + '</b></span>') if item.get('reference_version') else ''}
                 <span>Goedgekeurd: <b>{_esc(accepted)}</b></span>
                 <span>N-score: <b>{_num(item.get('not_made_count'), 0)}</b></span>
               </div>
@@ -486,7 +487,7 @@ def export_analysis_xlsx(data: dict[str, Any], output_path: str | Path, options:
 
     if options.get("item_analysis", False):
         append_section("Itemanalyse")
-        sheet.append(["Vraag", "Omschrijving", "Max.", "P-waarde", "Rit", "Rir", "P-status", "Rit-status", "Rir-status", "Beslissing", "Onderbouwing"])
+        sheet.append(["Vraag", "Omschrijving", "Max.", "P-waarde", "Rit", "Rir", "P-status", "Rit-status", "Rir-status", "Beslissing", "Onderbouwing", "Leerlingen"])
         style_header(sheet.max_row)
         for item in data.get("question_group_analysis") or data.get("item_analysis", []):
             status = item.get("status", {}) if isinstance(item, dict) else {}
@@ -503,6 +504,7 @@ def export_analysis_xlsx(data: dict[str, Any], output_path: str | Path, options:
                     _status_label(item.get("rir_status")),
                     _status_label(status),
                     str(status.get("reason") or "") if isinstance(status, dict) else "",
+                    item.get("participant_count"),
                 ]
             )
             for child in item.get("children", []) if isinstance(item, dict) else []:
@@ -520,12 +522,13 @@ def export_analysis_xlsx(data: dict[str, Any], output_path: str | Path, options:
                         _status_label(child.get("rir_status")),
                         _status_label(child_status),
                         str(child_status.get("reason") or "") if isinstance(child_status, dict) else "",
+                        child.get("participant_count"),
                     ]
                 )
 
     if options.get("multiple_choice", False):
         append_section("Meerkeuzeanalyse")
-        sheet.append(["Vraag", "Sleutel", "Goedgekeurde opties", "Niet gemaakt", "P-waarde", "Rit", "Rir", "Conclusie"])
+        sheet.append(["Vraag", "Sleutel", "Goedgekeurde opties", "Niet gemaakt", "P-waarde", "Rit", "Rir", "Conclusie", "Leidende alternatiefletters volgens versie"])
         style_header(sheet.max_row)
         for item in data.get("multiple_choice", {}).get("items", []):
             sheet.append(
@@ -538,9 +541,10 @@ def export_analysis_xlsx(data: dict[str, Any], output_path: str | Path, options:
                     _fmt(item.get("rit")),
                     _fmt(item.get("rir")),
                     item.get("conclusion", {}).get("text", "") if isinstance(item.get("conclusion"), dict) else "",
+                    item.get("reference_version", ""),
                 ]
             )
-            sheet.append(["", "Alternatief", "Aantal", "Percentage", "Goedgekeurd"])
+            sheet.append(["", "Alternatief", "Aantal", "Percentage", "Goedgekeurd", "Gekoppelde letters per versie"])
             for response in item.get("responses", []):
                 sheet.append(
                     [
@@ -549,6 +553,7 @@ def export_analysis_xlsx(data: dict[str, Any], output_path: str | Path, options:
                         response.get("count"),
                         _fmt(response.get("percentage")),
                         "ja" if response.get("accepted") else "nee",
+                        " / ".join(f"{link['version']}: {link['option']}" for link in response.get("version_options", [])),
                     ]
                 )
 

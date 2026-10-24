@@ -4,7 +4,93 @@ ToetsAnalyse is een lokaal desktopprogramma voor een docent. Deze eerste versie
 legt het fundament voor vakdatabases, schooljaren, klassen, leerlingen, toetsen
 en toetsmatrijzen.
 
+## Simpel of Uitgebreid
+
+Het startscherm biedt bovenaan **Simpel** en onderaan **Uitgebreid**. Uitgebreid
+opent de bestaande vakbestanden. Simpel werkt met één losse toets, zonder vak-
+of klassenbeheer, in een eigen **`.tviz`-analysebestand**. De twee bestandssoorten
+worden niet met elkaar vermengd.
+
+Klik eerst op **Simpel openen**. Pas op het volgende scherm verschijnen
+**CITO-analyseformulier uploaden**, **Zelf starten** en **Analyse openen**, elk met uitleg.
+Een nieuwe analyse vraagt het aantal vragen en leerlingen. Daarna opent een
+handleiding met zeven onderwerpen, gemarkeerde voorbeeldschermen en
+Vorige/Volgende. U kunt meteen een onderwerp kiezen, de uitleg overslaan met een
+knop of haar bij volgende analyses automatisch overslaan met het aparte vinkje.
+De handleiding behandelt maximumscores, namen, 0/N/antwoordletters, beide manieren
+van Excel-plakken, de drie invoerrichtingen, optionele instellingen en opslaan.
+CITO-import leest de ingevulde vragen, maximumscores en
+leerlingenscores uit Referentie en Gegevens; lege leerlingregels worden overgeslagen.
+
+Boven de tabel blijven **Aantal vragen** en **Aantal leerlingen** bewerkbaar.
+Verlagen verbergt extra kolommen of rijen zonder de gegevens te wissen. Verhogen
+laat eerder ingevulde namen, scores, metadata en antwoordsleutels weer zien.
+Normering, analyse en Excel-export gebruiken alleen de zichtbare aantallen.
+
+Voer scores horizontaal per leerling, verticaal per vraag of gecombineerd in.
+Ctrl+V plakt vanuit Excel, Ctrl+C kopieert en Ctrl+Z herstelt een invoer of plakactie.
+Standaard gebruikt u hele punten. **0** is een echte score; **N** betekent niet
+gemaakt en telt als nul; een lege cel moet nog worden ingevuld. Afwezige leerlingen
+neemt u niet op. De tabel heeft een kleurenlegenda.
+
+Met **Vragen indelen** koppelt u optionele RTTI-, OBIT- en Bloom-categorieën of eigen
+indelingen en categorieën. Met **Meerkeuze instellen** kiest u per vraag een sleutel;
+daarna voert u antwoordletters in. Zonder sleutel gebruikt u punten. **Exporteren
+naar Excel** bewaart de zichtbare tabel en de vraaginstellingen/metadata.
+
+Na de eerste keer **Opslaan** worden geldige wijzigingen automatisch in het gekozen
+bestand bewaard. **Opslaan als** maakt een andere kopie. **Normeren** en **Analyseren**
+worden beschikbaar als alle zichtbare maximumscores en scores geldig zijn ingevuld.
+Zonder vastgestelde normering is de analyseknop oranje en aanklikbaar: scores en
+vragen zijn te analyseren, cijfers en cijferafhankelijke onderdelen volgen na normering.
+Groepsniveau gaat over de deelnemers van de toets.
+De bestaande dashboards zijn beschikbaar, met technische details achter extra uitleg.
+De analyse geeft eerst begrijpelijke conclusies; de oorspronkelijke technische
+onderbouwing is opvraagbaar. Bij normering staat uitleg per methode en een
+punten-naar-cijfervoorbeeld dat direct meeverandert. Proberen wijzigt geen scores.
+Knoppen in de simpele modus zijn Nederlandstalig. De bedieningsknoppen lopen op
+kleinere schermen door op een volgende regel en de keuzelijsten passen in hun tabelrijen.
+
 ## Beschikbaar in deze versie
+
+### Toetsversies
+
+Ontgrendel **Meerdere versies binnen één toets** bij Geavanceerde instellingen.
+Bij een nieuwe toets verschijnt daarna de standaard uitgeschakelde optie
+**Deze toets heeft meerdere versies**, met zelf te kiezen versienamen. Bestaande
+toetsen kunnen niet achteraf worden omgezet.
+
+Voer eerst gedeelde vragen in, met een herkenbare titel en per versie een vinkje
+en vraagnummer. Een vraag kan ook in slechts enkele versies voorkomen. Voeg daarna
+de specifieke vragen toe. Via **Toetsversies beheren** kunt u titels, nummering,
+koppelingen en leerlingtoewijzingen beheren. Een overzichtstab toont ontbrekende
+titels, vraagkoppelingen, vraagnummers en leerlingtoewijzingen. Met **Alles opslaan**
+bewaart u vragen en leerlingtoewijzingen samen; bij een fout wordt geen van beide
+gedeeltelijk opgeslagen. Bij sluiten wordt u herinnerd aan niet-opgeslagen
+wijzigingen. Toewijzen kan individueel, aan een selectie of aan een hele klas/groep.
+
+Bij het toevoegen kiest u eerst **Gedeelde vraag** of **Versiespecifieke vraag**.
+Daarna verschijnen alleen de relevante velden. Een gedeelde vraag krijgt een
+herkenbare titel en minstens twee versies; bij een specifieke vraag kiest u één versie.
+
+Bij afwijkende meerkeuzevolgordes koppelt u de inhoudelijk gelijke alternatieven
+per versie, met een voorbeeld dat direct laat zien welke letters bij hetzelfde
+antwoord horen, zoals **A in versie A = C in versie B**. Per vraag kiest u welke versie leidend is voor de weergegeven
+alternatiefletters. Dit staat vermeld in het overzicht en de gezamenlijke
+afleideranalyse; de vraagnummers worden hierdoor niet gewijzigd.
+
+Resultateninvoer, Excel-import/export en normering werken per versie. De analyse
+kan per versie of gezamenlijk worden geopend. Gedeelde vragen worden samengevoegd
+onder hun titel, met het aantal leerlingen met een score. Vragen die niet in een
+versie voorkomen tellen niet als nul. Gezamenlijke totaalscores worden uitgedrukt
+als percentage van de eigen versie; betrouwbaarheid en meetfout worden per versie
+getoond.
+
+Een leerling met scores kan pas van versie wisselen nadat die scores zijn gewist.
+Vragen toevoegen aan of verwijderen uit een versie met scores is geblokkeerd;
+titels, omschrijvingen en nummering blijven aanpasbaar.
+
+### Overige functies
 
 - Een afzonderlijke SQLite-database per vak.
 - Startscherm voor nieuw vak, bestaand vak, laatst geopend vak en herstel uit
