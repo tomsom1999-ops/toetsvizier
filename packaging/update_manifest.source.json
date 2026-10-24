@@ -2,7 +2,6 @@
   "release_notes": "ToetsVizier 0.5.0 introduceert de aparte simpele modus voor losse toetsen en meerdere versies binnen een toets in de uitgebreide modus. Inclusief uitgebreide uitleg, CITO-import, Excel-invoer en verbeterde analyse.",
   "download_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v{version}",
   "installer_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-{version}-windows-installer.exe",
-  "package_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-update-{version}.zip",
   "update_type": "installer",
   "versions": [
     {
@@ -21,5 +20,6 @@
         "Extra controles op gegevensbehoud, berekeningen, updates en het uitsluiten van lokale analysebestanden uit releases."
       ]
     }
-  ]
+  ],
+  "installer_sha256": "0e622141c70a7850e3343f30135a6111b7cb686063d31fc9e993eba765611c1d"
 }

@@ -1,24 +1,26 @@
 {
-  "latest_version": "0.4.0",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.4.0",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.4.0/ToetsVizier-0.4.0-windows-installer.exe",
-  "release_notes": "Update 0.4.0 is een installer-release met de stabiliteits- en betrouwbaarheidsverbeteringen uit de laatste ontwikkelronde. Normeringscurves gebruiken nu backend-berekeningen als bron van waarheid, dashboardgrafieken tonen duidelijke fallbackmeldingen bij renderproblemen en de releasecontrole is uitgebreid om fouten voor publicatie eerder te vinden.",
+  "latest_version": "0.5.0",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v0.5.0",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.5.0/ToetsVizier-0.5.0-windows-installer.exe",
+  "release_notes": "ToetsVizier 0.5.0 introduceert de aparte simpele modus voor losse toetsen en meerdere versies binnen een toets in de uitgebreide modus. Inclusief uitgebreide uitleg, CITO-import, Excel-invoer en verbeterde analyse.",
   "versions": [
     {
-      "version": "0.4.0",
+      "version": "0.5.0",
       "type": "minor",
-      "title": "Installer-release met stabiliteit en betrouwbaarheid",
+      "title": "Simpele modus en meerdere toetsversies",
       "changes": [
-        "Normeringscurvepunten worden nu in Python berekend en met het dashboard meegestuurd, zodat cijferberekening en curve dezelfde basis gebruiken.",
-        "De lineaire methode is extra getest op 1,0 bij 0 punten, 5,5 op de cesuur en 10,0 bij de maximumscore.",
-        "Toetsanalyse- en normeringsgrafieken tonen voortaan een duidelijke melding als een grafiek niet geladen kan worden, in plaats van een lege kaart.",
-        "Dashboardrenderfouten worden met scherm, toets en grafieknaam in de lokale log gezet.",
-        "Er is een pre-release kwaliteitscheck toegevoegd met syntaxcheck, volledige testsuite, update-manifestcontrole en privacycontrole voor publicatie.",
-        "Deze versie wordt als volledige Windows-installer aangeboden, zodat gebruikers zonder bestaande updatepakketroute ook naar de nieuwste versie kunnen."
+        "Nieuw startscherm met Simpel voor een losse toets en Uitgebreid voor vakken en klassen.",
+        "Simpel: starten met vraag- en leerlingaantallen, een ingevuld CITO-analyseformulier uploaden of een opgeslagen .tviz-analyse openen.",
+        "Uitgebreide schermuitleg met voorbeelden, legenda en een knop om de uitleg over te slaan.",
+        "Scores invoeren per leerling of per vraag, plakken vanuit Excel, N voor niet gemaakt en optionele meerkeuze-antwoordsleutels.",
+        "Vraagmetadata met RTTI, OBIT, Bloom en zelf in te richten categorie\u00ebn; Excel-export en aparte analysebestanden.",
+        "Aantallen aanpassen zonder verborgen gegevens te verwijderen; analyse zonder normering is herkenbaar oranje en gedeeltelijk beschikbaar.",
+        "Uitgebreid: optionele toetsversies met gemeenschappelijke en specifieke vragen, herkenbare vraagtitels en leerlingtoewijzing.",
+        "Meerkeuzealternatieven tussen versies koppelen, een leidende versie voor alternatieven kiezen en per versie normeren en analyseren.",
+        "Extra controles op gegevensbehoud, berekeningen, updates en het uitsluiten van lokale analysebestanden uit releases."
       ]
     }
   ],
-  "package_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v0.4.0/ToetsVizier-update-0.4.0.zip",
   "update_type": "installer",
-  "installer_sha256": "B2636E16D0AB1F03078DE6971A667B07A345D47E269A0BB4442C2D2AA0C748A2"
+  "installer_sha256": "0e622141c70a7850e3343f30135a6111b7cb686063d31fc9e993eba765611c1d"
 }
