@@ -364,6 +364,10 @@ class NewSubjectDialogTests(unittest.TestCase):
                     "INSERT INTO matrix_questions(test_id, question_number, maximum_score) VALUES(?, ?, ?)",
                     (test_id, "1", 3),
                 )
+                database.execute(
+                    "INSERT INTO matrix_questions(test_id, question_number, maximum_score) VALUES(?, ?, ?)",
+                    (test_id, "2", 12),
+                )
                 page = ResultsPage(database, year_id)
                 page.test.setCurrentIndex(1)
                 self.assertTrue(page.table.isColumnHidden(0))
@@ -372,6 +376,17 @@ class NewSubjectDialogTests(unittest.TestCase):
                 header_item = page.table.verticalHeaderItem(0)
                 self.assertIsNotNone(header_item)
                 self.assertEqual("Mila de Vries", header_item.text())
+                self.assertTrue(page.should_quick_advance(page.questions[0]))
+                self.assertFalse(page.should_quick_advance(page.questions[1]))
+                score_cell = page.table.item(0, page.SCORE_START_COLUMN)
+                with patch("toetsanalyse.results_page.QMessageBox.warning"):
+                    score_cell.setText("9")
+                self.assertIn((0, page.SCORE_START_COLUMN), page.invalid_cells)
+                self.assertFalse(page.error_banner.isHidden())
+                self.assertIn("Mila de Vries, vraag 1", page.error_banner.text())
+                score_cell.setText("2")
+                self.assertNotIn((0, page.SCORE_START_COLUMN), page.invalid_cells)
+                self.assertTrue(page.error_banner.isHidden())
                 page.close()
             finally:
                 database.close()

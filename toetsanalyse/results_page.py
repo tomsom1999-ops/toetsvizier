@@ -172,10 +172,12 @@ class ActiveScoreCellDelegate(QStyledItemDelegate):
         super().paint(painter, option, index)
         first = self.page.SCORE_START_COLUMN
         last = first + len(self.page.questions) - 1
-        if index.row() != self.page.table.currentRow() or not (first <= index.column() <= last):
+        invalid = (index.row(), index.column()) in self.page.invalid_cells
+        active = index.row() == self.page.table.currentRow() and first <= index.column() <= last
+        if not invalid and not active:
             return
         painter.save()
-        painter.setPen(QPen(QColor("#2563eb"), 2))
+        painter.setPen(QPen(QColor("#dc2626" if invalid else "#2563eb"), 2))
         painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
         painter.restore()
 
@@ -547,6 +549,7 @@ class ResultsPage(Page):
         self.loading = False
         self.quick_entry_possible = False
         self.active_student_row = -1
+        self.invalid_cells: dict[tuple[int, int], str] = {}
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
         scroll_area = QScrollArea()
@@ -716,8 +719,8 @@ class ResultsPage(Page):
             "cijfers/letters = invoeren | Enter/pijltjes = navigeren. "
             "Invoerrichting: horizontaal = per leerling, verticaal = per vraag, gecombineerd = vanaf de gekozen Beginvraag blokjes scorekolommen per leerling; "
             "Beginvraag schuift automatisch mee naar het volgende blok. "
-            "Kleuren: blauwe totaalscore = rij compleet | oranje N = vraag niet gemaakt | "
-            "groen/rood = meerkeuze goed/fout."
+            "Kleuren: blauw = actieve leerling/vraag of complete totaalscore | wit = gewone score of leeg | "
+            "lichtoranje = N | groen/lichtrood = meerkeuze goed/fout | rode rand = invoerfout."
         )
         self.input_guide.setWordWrap(True)
         self.input_guide.setStyleSheet(
@@ -726,6 +729,14 @@ class ResultsPage(Page):
         )
         self.input_guide.setVisible(False)
         self.score_layout.addWidget(self.input_guide)
+        self.error_banner = QLabel()
+        self.error_banner.setWordWrap(True)
+        self.error_banner.setStyleSheet(
+            "QLabel {background:#fff1f2; color:#9f1239; border:1px solid #e11d48; "
+            "border-radius:6px; padding:8px; font-weight:600;}"
+        )
+        self.error_banner.hide()
+        self.score_layout.addWidget(self.error_banner)
         self.table = QTableWidget()
         self.student_header = ActiveStudentHeader(self.table)
         self.question_header = ActiveQuestionHeader(self.table)
@@ -1173,6 +1184,10 @@ class ResultsPage(Page):
 
     def refresh_scores(self) -> None:
         self.update_entry_visibility()
+        self.invalid_cells.clear()
+        if hasattr(self, "error_banner"):
+            self.error_banner.clear()
+            self.error_banner.hide()
         test_id = self.test.currentData()
         from .version_dialog import fill_version_combo
         from .test_versions import mapped_questions, student_version
@@ -1432,7 +1447,7 @@ class ResultsPage(Page):
                     if cell is not None:
                         cell.setText(chr(event.key()).upper())
                         return True
-                if self.should_quick_advance() and Qt.Key.Key_0 <= event.key() <= Qt.Key.Key_9:
+                if self.should_quick_advance(question) and Qt.Key.Key_0 <= event.key() <= Qt.Key.Key_9:
                     digit = chr(event.key())
                     cell = self.table.item(row, column)
                     if cell is not None:
@@ -1464,8 +1479,11 @@ class ResultsPage(Page):
             cell.setText(previous)
             self.loading = False
             self.set_save_state("error")
+            self.invalid_cells[cell.row(), cell.column()] = str(error)
+            self.show_score_error(cell.row(), cell.column(), str(error))
             QMessageBox.warning(self, "Score niet opgeslagen", str(error))
             self.table.setCurrentCell(cell.row(), cell.column())
+            self.table.viewport().update()
             return
         normalized = cell.text().strip().replace(",", ".")
         if is_not_made_score(normalized):
@@ -1487,14 +1505,42 @@ class ResultsPage(Page):
             status.setCurrentText("gemaakt")
             status.setProperty("previous_status", "gemaakt")
         self.loading = False
+        self.invalid_cells.pop((cell.row(), cell.column()), None)
+        self.refresh_score_error_banner()
         self.apply_row_style(cell.row())
         self.update_summary()
         self.set_save_state("saved")
-        if normalized and self.should_quick_advance():
+        if normalized and (
+            is_not_made_score(normalized)
+            or bool(question.get("is_multiple_choice"))
+            or self.should_quick_advance(question)
+        ):
             self.advance_after_entry(cell.row(), cell.column())
 
-    def should_quick_advance(self) -> bool:
-        return self.quick_entry_possible and not self.half_points.isChecked()
+    def should_quick_advance(self, question: dict | None = None) -> bool:
+        if self.half_points.isChecked():
+            return False
+        if question is None:
+            return self.quick_entry_possible
+        return 0 < float(question.get("maximum_score") or 0) <= 9
+
+    def show_score_error(self, row: int, column: int, message: str) -> None:
+        offset = column - self.SCORE_START_COLUMN
+        learner = self.students[row]["display_name"] if 0 <= row < len(self.students) else f"rij {row + 1}"
+        question = self.questions[offset]["label"] if 0 <= offset < len(self.questions) else str(column + 1)
+        self.error_banner.setText(
+            f"Fout bij {learner}, vraag {question}: {message} Corrigeer de cel; daarna verdwijnt de rode rand."
+        )
+        self.error_banner.show()
+
+    def refresh_score_error_banner(self) -> None:
+        if self.invalid_cells:
+            (row, column), message = next(iter(self.invalid_cells.items()))
+            self.show_score_error(row, column, message)
+        else:
+            self.error_banner.clear()
+            self.error_banner.hide()
+        self.table.viewport().update()
 
     @staticmethod
     def status_combo_stylesheet(status: str) -> str:
