@@ -4,7 +4,7 @@ import math
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QHBoxLayout, QLabel,
-    QPushButton, QScrollArea, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+    QPushButton, QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 from .ui_helpers import set_button_role
 
 
@@ -121,32 +121,105 @@ class InputDemo(QWidget):
         super().__init__()
         self.focus_area = "counts"
         self.variant = 0
-        self.setMinimumHeight(275)
+        self.setMinimumHeight(430)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
-        self.files = QLabel("Opslaan          Opslaan als          Exporteren naar Excel          Uitleg")
-        self.counts = QLabel("Aantal vragen: 3                         Aantal leerlingen: 2")
-        self.routes = QLabel("Horizontaal (per leerling)     Verticaal (per vraag)     Gecombineerd")
-        self.extras = QLabel("Vragen indelen                         Meerkeuze instellen")
-        for widget in (self.files, self.counts, self.routes, self.extras):
-            widget.setStyleSheet("QLabel {background:#edf3ff;border:1px solid #c9daf9;border-radius:4px;padding:5px;font-size:9pt}")
-            widget.setWordWrap(True)
-            layout.addWidget(widget)
+
+        def button(text, role='secondary'):
+            result = set_button_role(QPushButton(text), role)
+            result.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            return result
+
+        self.files = QWidget()
+        file_row = QHBoxLayout(self.files)
+        file_row.setContentsMargins(0, 0, 0, 0)
+        file_row.addWidget(QLabel('<b>Simpel · één losse toets</b>'))
+        for text, role in (("Opslaan", "primary"), ("Opslaan als", "secondary"),
+                           ("Exporteren naar Excel", "secondary"), ("Uitleg", "secondary"),
+                           ("Sluiten", "secondary")):
+            file_row.addWidget(button(text, role))
+        file_row.addStretch()
+        layout.addWidget(self.files)
+
+        self.steps = QWidget()
+        step_row = QHBoxLayout(self.steps)
+        step_row.setContentsMargins(0, 0, 0, 0)
+        for text, role in (("1. Gegevens invullen", "primary"), ("2. Normeren", "secondary"),
+                           ("3. Analyseren", "secondary")):
+            step_row.addWidget(button(text, role), 1)
+        layout.addWidget(self.steps)
+
+        self.counts = QWidget()
+        count_row = QHBoxLayout(self.counts)
+        count_row.setContentsMargins(0, 0, 0, 0)
+        for prefix, value in (("Aantal vragen: ", 3), ("Aantal leerlingen: ", 2)):
+            counter = QSpinBox()
+            counter.setPrefix(prefix)
+            counter.setRange(0, 1000)
+            counter.setValue(value)
+            counter.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            count_row.addWidget(counter)
+        count_row.addWidget(QLabel("Lager aantal? Extra gegevens blijven bewaard."))
+        count_row.addStretch()
+        layout.addWidget(QLabel('<b>Toets instellen</b>'))
+        layout.addWidget(self.counts)
+        self.extras = QWidget()
+        extras_row = QHBoxLayout(self.extras)
+        extras_row.setContentsMargins(0, 0, 0, 0)
+        self.metadata = button("Vragen indelen")
+        self.multiple_choice = button("Meerkeuze instellen")
+        extras_row.addWidget(self.metadata)
+        extras_row.addWidget(self.multiple_choice)
+        extras_row.addStretch()
+        layout.addWidget(self.extras)
+
+        self.routes = QWidget()
+        route_row = QHBoxLayout(self.routes)
+        route_row.setContentsMargins(0, 0, 0, 0)
+        self.route_choice = QComboBox()
+        self.route_choice.addItems(["Horizontaal (per leerling)", "Verticaal (per vraag)", "Gecombineerd"])
+        self.route_choice.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        route_row.addWidget(self.route_choice)
+        precision = QComboBox()
+        precision.addItems(["Hele punten", "Halve punten", "Kwartpunten", "Tiende punten"])
+        precision.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        route_row.addWidget(precision)
+        route_row.addStretch()
+        layout.addWidget(QLabel('<b>Invoerroute en punten</b>'))
+        layout.addWidget(self.routes)
+
+        self.progress = QWidget()
+        progress_row = QHBoxLayout(self.progress)
+        progress_row.setContentsMargins(0, 0, 0, 0)
+        progress_row.addWidget(QLabel("2 leerlingen · 3 vragen · 5 van 6 scores ingevuld · 1 nog open"), 1)
+        progress_row.addWidget(button("Ongedaan maken"))
+        progress_row.addWidget(button("Groot invoerscherm"))
+        layout.addWidget(self.progress)
+
         self.table = QTableWidget(3, 5)
-        self.table.setHorizontalHeaderLabels(["Leerlingnaam", "Vraag 1", "Vraag 2", "Vraag 3", "Totaal"])
+        self.table.setHorizontalHeaderLabels(["Leerlingnaam", "Vraag 1", "Vraag 2", "Vraag 3\nSleutel: B", "Totaal"])
+        self.table.horizontalHeader().setMinimumHeight(42)
         self.table.verticalHeader().hide()
-        for r, values in enumerate((["Maximaal aantal punten", "3", "2", "2", "7"], ["Sam", "2", "0", "N", "2"], ["Alex", "1", "2", "2", "5"])):
+        values_by_row = (["Maximaal aantal punten", "3", "2", "1", "6"],
+                         ["Sam", "2", "N", "B", "3"],
+                         ["Alex", "1", "2", "A", "3"])
+        for r, values in enumerate(values_by_row):
             for c, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                item.setBackground(QColor("#dbeafe" if r == 0 or c == 4 else "#fff8ed" if value == "N" else "#ffffff"))
+                color = "#dbeafe" if r == 0 or c == 4 else "#fff8ed" if value == "N" else \
+                        "#e8f7e8" if value == "B" else "#fdecec" if value == "A" and c == 3 else "#ffffff"
+                item.setBackground(QColor(color))
                 self.table.setItem(r, c, item)
         self.table.setColumnWidth(0, 185)
         for c in range(1, 5):
             self.table.setColumnWidth(c, 80)
-        self.table.setMinimumHeight(155)
-        self.table.setMaximumHeight(170)
-        layout.addWidget(self.table)
+        self.table.setMinimumHeight(150)
+        layout.addWidget(self.table, 1)
+        self.legend = QLabel("Kleurenlegenda: blauw = actief/maximum/totaal · wit = punten · groen = goed antwoord · "
+                             "lichtrood = fout antwoord · lichtoranje = N · rode rand = ongeldige invoer")
+        self.legend.setWordWrap(True)
+        layout.addWidget(self.legend)
         self.overlay = DemoOverlay(self)
 
     def resizeEvent(self, event):
@@ -160,7 +233,8 @@ class InputDemo(QWidget):
         return QRectF(corner.x(), corner.y(), cell.width(), cell.height())
 
     def widget_rect(self, widget):
-        return QRectF(widget.geometry())
+        top_left = widget.mapTo(self, QPoint(0, 0))
+        return QRectF(top_left.x(), top_left.y(), widget.width(), widget.height())
 
     def highlights(self):
         area = self.focus_area
@@ -169,7 +243,7 @@ class InputDemo(QWidget):
         if area == "scores": return [self.cell_rect(1, 1).united(self.cell_rect(2, 3))]
         if area == "paste": return [self.cell_rect(1, 1 if self.variant == 0 else 0)]
         if area == "direction": return [self.widget_rect(self.routes)]
-        if area == "extras": return [self.widget_rect(self.extras)]
+        if area == "extras": return [self.widget_rect(self.metadata), self.widget_rect(self.multiple_choice)]
         return [self.widget_rect(self.files)]
 
     def arrows(self):
@@ -245,6 +319,7 @@ class InputIntroduction(QDialog):
         self.variant.setVisible(area in {"paste", "direction"})
         self.variant.blockSignals(False)
         self.demo.focus_area, self.demo.variant = area, 0
+        self.demo.route_choice.setCurrentIndex(0)
         self.caption.setText("De oranje cel is de begincel voor uw plakactie." if area == "paste" else
                              "De groene pijlen laten zien waar Enter of Tab u naartoe brengt." if area == "direction" else
                              "Voorbeeldscherm: de oranje omlijning wijst het besproken onderdeel aan.")
@@ -256,6 +331,8 @@ class InputIntroduction(QDialog):
     def change_variant(self, index):
         if hasattr(self, "demo"):
             self.demo.variant = max(index, 0)
+            if self.demo.focus_area == "direction":
+                self.demo.route_choice.setCurrentIndex(max(index, 0))
             self.demo.overlay.update()
 
     def next_step(self):
