@@ -3649,7 +3649,7 @@ class AdvancedSettingsPage(Page):
             self.update_manifest_url.setText(update_manifest_url_from_settings(self.settings))
         else:
             self.update_manifest_url.setText(DEFAULT_UPDATE_MANIFEST_URL)
-        self.update_auto_check.setChecked(settings_bool(self.settings, UPDATE_AUTO_CHECK_KEY, False))
+        self.update_auto_check.setChecked(settings_bool(self.settings, UPDATE_AUTO_CHECK_KEY, True))
         self.question_database.blockSignals(False)
         self.development_analysis.blockSignals(False)
         self.student_attribute_analysis.blockSignals(False)
@@ -5247,7 +5247,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(1400, self.check_updates_on_start)
 
     def check_updates_on_start(self) -> None:
-        if not settings_bool(self.settings, UPDATE_AUTO_CHECK_KEY, False):
+        if not settings_bool(self.settings, UPDATE_AUTO_CHECK_KEY, True):
             return
         manifest_url = update_manifest_url_from_settings(self.settings)
         if not manifest_url or (self.update_thread and self.update_thread.isRunning()):
