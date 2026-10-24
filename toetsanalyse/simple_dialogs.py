@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, 
 
 from .results import test_questions
 from .simple_model import active_questions, active_taxonomies
-from .simple_widgets import fit_table_controls, dutch_buttons, text_input, WrappingLayout
+from .simple_widgets import fit_table_controls, dutch_buttons, text_input, WrappingLayout, question
 from .ui_helpers import set_button_role
 
 
@@ -73,6 +73,7 @@ class MetadataDialog(QDialog):
             "JOIN taxonomy_definitions d ON d.id=qtv.taxonomy_id JOIN taxonomy_values v ON v.id=qtv.taxonomy_value_id")}
         self.enabled = {row['name'] for row in active_taxonomies(database)}
         self.checks = {}
+        self.deleted_ids = set()
         self.setWindowTitle("Vragen indelen — optioneel")
         self.resize(940, 600)
         layout = QVBoxLayout(self)
@@ -97,6 +98,9 @@ class MetadataDialog(QDialog):
         edit.clicked.connect(self.edit_distribution)
         actions.addWidget(add)
         actions.addWidget(edit)
+        self.remove_distribution_button = set_button_role(QPushButton('Eigen indeling verwijderen'), 'danger')
+        self.remove_distribution_button.clicked.connect(self.remove_distribution)
+        actions.addWidget(self.remove_distribution_button)
         layout.addLayout(actions)
         layout.addWidget(self.empty, 1)
         self.table = QTableWidget()
@@ -113,6 +117,7 @@ class MetadataDialog(QDialog):
             self.selected[qid, name] = combo.currentText() if combo.currentIndex() > 0 else ""
 
     def build(self):
+        self.remove_distribution_button.setEnabled(any(not d['standard'] for d in self.definitions))
         names = [d['name'] for d in self.definitions]
         if list(self.checks) != names:
             while self.choices.count():
@@ -196,9 +201,32 @@ class MetadataDialog(QDialog):
             definition["values"] = categories
             self.build()
 
+    def remove_distribution(self):
+        names = [d['name'] for d in self.definitions if not d['standard']]
+        if not names:
+            return
+        name = text_input(self, 'Eigen indeling verwijderen', 'Welke eigen indeling wilt u verwijderen?', choices=names)
+        if name not in names:
+            return
+        if question(self, 'Eigen indeling verwijderen',
+                    f'Bij Opslaan wordt de indeling “{name}” verwijderd, inclusief de categorieën en '
+                    'de koppelingen aan alle vragen, ook verborgen vragen. Scores blijven bewaard.\n\n'
+                    'Wilt u deze indeling verwijderen?') != QMessageBox.StandardButton.Yes:
+            return
+        self.capture()
+        tid = self.database.scalar('SELECT id FROM taxonomy_definitions WHERE name=? AND is_standard=0', (name,))
+        if tid is not None:
+            self.deleted_ids.add(tid)
+        self.definitions = [d for d in self.definitions if d['name'] != name]
+        self.enabled.discard(name)
+        self.selected = {key: value for key, value in self.selected.items() if key[1] != name}
+        self.build()
+
     def apply(self):
         self.capture()
         connection = self.database.connection
+        for tid in self.deleted_ids:
+            connection.execute('DELETE FROM taxonomy_definitions WHERE id=? AND is_standard=0', (tid,))
         connection.execute('DELETE FROM test_taxonomy_selections WHERE test_id=1')
         self.database.set_meta('simple_taxonomy_selection_configured', '1')
         for q in self.questions:
@@ -220,3 +248,4 @@ class MetadataDialog(QDialog):
                 if value in definition["values"]:
                     value_id = self.database.scalar("SELECT id FROM taxonomy_values WHERE taxonomy_id=? AND name=?", (tid, value))
                     connection.execute("INSERT INTO question_taxonomy_values VALUES(?,?,?)", (q["id"], tid, value_id))
+        self.deleted_ids.clear()

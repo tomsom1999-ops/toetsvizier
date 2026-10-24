@@ -303,6 +303,77 @@ class SimpleModeTests(unittest.TestCase):
         finally:
             dialog.close()
 
+    def test_delete_custom_distribution_removes_hidden_links_keeps_scores_and_supports_undo(self):
+        self.qt()
+        self.fill()
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QMessageBox, QDialog
+        from toetsanalyse.simple_dialogs import MetadataDialog
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        qs = active_questions(self.db)
+        setup = MetadataDialog(self.db)
+        for name in ['Verkeerd', 'Bewaren']:
+            with patch('toetsanalyse.simple_dialogs.text_input', side_effect=[name, 'Een\nTwee']):
+                setup.add_distribution()
+            setup.combos[qs[2]['id'], name].setCurrentText('Twee')
+        with self.db.connection:
+            setup.apply()
+            set_counts(self.db, 1, 1)
+        setup.close()
+        previous_scores = stored_results(self.db, 1)
+        tid = self.db.scalar("SELECT id FROM taxonomy_definitions WHERE name='Verkeerd'")
+        w = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / 'remove.ini'), QSettings.Format.IniFormat))
+        dialog = MetadataDialog(self.db, w)
+        try:
+            with patch('toetsanalyse.simple_dialogs.text_input', return_value='Verkeerd'), \
+                 patch('toetsanalyse.simple_dialogs.question', return_value=QMessageBox.StandardButton.Yes):
+                dialog.remove_distribution()
+            self.assertNotIn('Verkeerd', dialog.checks)
+            self.assertIsNotNone(self.db.scalar('SELECT id FROM taxonomy_definitions WHERE id=?', (tid,)))
+            with patch('toetsanalyse.simple_workspace.MetadataDialog', return_value=dialog), \
+                 patch.object(dialog, 'exec', return_value=QDialog.DialogCode.Accepted):
+                w.metadata()
+            self.assertIsNone(self.db.scalar('SELECT id FROM taxonomy_definitions WHERE id=?', (tid,)))
+            self.assertEqual(0, self.db.scalar('SELECT COUNT(*) FROM question_taxonomy_values WHERE taxonomy_id=?', (tid,)))
+            self.assertEqual(0, self.db.scalar('SELECT COUNT(*) FROM taxonomy_values WHERE taxonomy_id=?', (tid,)))
+            self.assertEqual(0, self.db.scalar('SELECT COUNT(*) FROM test_taxonomy_selections WHERE taxonomy_id=?', (tid,)))
+            self.assertEqual(previous_scores, stored_results(self.db, 1))
+            self.assertIsNotNone(self.db.scalar("SELECT id FROM taxonomy_definitions WHERE name='Bewaren'"))
+            self.assertEqual(3, self.db.scalar('SELECT COUNT(*) FROM taxonomy_definitions WHERE is_standard=1'))
+            w.undo()
+            self.assertEqual(tid, self.db.scalar("SELECT id FROM taxonomy_definitions WHERE name='Verkeerd'"))
+            self.assertEqual(1, self.db.scalar('SELECT COUNT(*) FROM question_taxonomy_values WHERE taxonomy_id=? AND question_id=?', (tid, qs[2]['id'])))
+            self.assertEqual(previous_scores, stored_results(self.db, 1))
+        finally:
+            dialog.close()
+            w.close()
+
+    def test_deleting_distribution_can_be_declined_or_cancelled_and_never_deletes_standards(self):
+        self.qt()
+        from PySide6.QtWidgets import QMessageBox
+        from toetsanalyse.simple_dialogs import MetadataDialog
+        dialog = MetadataDialog(self.db)
+        self.assertFalse(dialog.remove_distribution_button.isEnabled())
+        with patch('toetsanalyse.simple_dialogs.text_input', side_effect=['Eigen', 'Een\nTwee']):
+            dialog.add_distribution()
+        with self.db.connection:
+            dialog.apply()
+        before = self.db.connection.serialize()
+        with patch('toetsanalyse.simple_dialogs.text_input', return_value='Eigen'), \
+             patch('toetsanalyse.simple_dialogs.question', return_value=QMessageBox.StandardButton.No):
+            dialog.remove_distribution()
+        self.assertIn('Eigen', dialog.checks)
+        with patch('toetsanalyse.simple_dialogs.text_input', return_value='RTTI'), \
+             patch('toetsanalyse.simple_dialogs.question') as confirm:
+            dialog.remove_distribution()
+            confirm.assert_not_called()
+        with patch('toetsanalyse.simple_dialogs.text_input', return_value='Eigen'), \
+             patch('toetsanalyse.simple_dialogs.question', return_value=QMessageBox.StandardButton.Yes):
+            dialog.remove_distribution()
+        dialog.reject()
+        self.assertEqual(before, self.db.connection.serialize())
+        dialog.close()
+
     def test_dynamic_cito_import_skips_unused_rows_and_keeps_blanks(self):
         try:
             from openpyxl import Workbook

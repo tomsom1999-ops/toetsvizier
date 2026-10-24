@@ -70,6 +70,9 @@ TOPICS = [
      "<p><b>Vragen indelen:</b> vink eerst aan welke verdelingen u wilt meenemen, bijvoorbeeld RTTI, OBIT of Bloom. "
      "Alleen aangevinkte verdelingen verschijnen als kolom en gaan mee in analyse en Excel-export. "
      "Uitvinken bewaart eerder gekozen categorieën; opnieuw aanvinken toont ze weer. "
+     "Een fout aangemaakte eigen indeling kunt u met <b>Eigen indeling verwijderen</b> verwijderen. "
+     "Na bevestiging wordt dit bij Opslaan uitgevoerd, inclusief categorieën en koppelingen aan verborgen vragen. "
+     "Annuleren bewaart de indeling; RTTI, OBIT en Bloom kunt u alleen uitvinken. "
      "Met Eigen indeling toevoegen kiest u zelf een naam en de categorieën. "
      "Hoofdstuk, paragraaf, vraagstuk en leerdoel zijn alleen voorbeelden. "
      "U vindt deze verdelingen terug onder Groepsniveau: dat gaat over de deelnemers van uw toets.</p>", "extras"),
