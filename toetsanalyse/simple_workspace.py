@@ -224,7 +224,8 @@ class SimpleWorkspace(QWidget):
         self.table.installEventFilter(self)
         self.table.setSelectionMode(QTableWidget.SelectionMode.ContiguousSelection)
         self.progress = QLabel()
-        self.progress.setWordWrap(True)
+        self.progress.setWordWrap(False)
+        self.progress.setFixedWidth(300)
         table_actions = WrappingLayout()
         route_label = QLabel('Invoerroute:')
         route_label.setStyleSheet('font-weight:600; color:#314766;')
@@ -242,7 +243,8 @@ class SimpleWorkspace(QWidget):
         layout.addLayout(table_actions)
         self.table_layout_index = layout.count()
         layout.addWidget(self.table, 1)
-        self.first_missing = QPushButton("Ga naar de eerste ontbrekende invoer")
+        self.first_missing = QPushButton("Eerste lege score")
+        self.first_missing.setToolTip("Ga naar de eerste ontbrekende of ongeldige score.")
         set_button_role(self.first_missing, 'secondary')
         self.first_missing.clicked.connect(self.go_missing)
         below_table = QHBoxLayout()
@@ -535,7 +537,7 @@ class SimpleWorkspace(QWidget):
                 if key not in missing_cells:
                     entered -= 1
         self.progress.setText(f'{len(self.students)} lln · {len(self.questions)} vragen · '
-                              f'{max(0, entered)} van {expected} · '
+                              f'{max(0, entered)}/{expected} ingevuld · '
                               f'{expected - max(0, entered)} open')
         finalized = has_active_normalization(self.database, 1)
         self.norm_button.setEnabled(ready)

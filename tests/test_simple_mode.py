@@ -767,7 +767,7 @@ class SimpleModeTests(unittest.TestCase):
         w.show()
         self.app.processEvents()
         try:
-            self.assertIn('4 van 6', w.progress.text())
+            self.assertIn('4/6', w.progress.text())
             w.precision.setCurrentIndex(w.precision.findData(.5))
             w.table.setCurrentCell(1, 1)
             w.table.setFocus()
@@ -777,11 +777,11 @@ class SimpleModeTests(unittest.TestCase):
             QTest.keyClicks(w.table, 'b')
             self.assertEqual('B', w.table.item(1, 2).text())
             self.assertEqual('#e8f7e8', w.table.item(1, 2).background().color().name())
-            self.assertIn('5 van 6', w.progress.text())
+            self.assertIn('5/6', w.progress.text())
             w.table.setCurrentCell(1, 2)
             QTest.keyClick(w.table, Qt.Key.Key_Backspace)
             self.assertEqual('', w.table.item(1, 2).text())
-            self.assertIn('4 van 6', w.progress.text())
+            self.assertIn('4/6', w.progress.text())
             w.undo()
             self.assertEqual('B', w.table.item(1, 2).text())
             w.table.setCurrentCell(1, 2)
@@ -789,7 +789,7 @@ class SimpleModeTests(unittest.TestCase):
             QTest.keyClick(w.table.focusWidget(), Qt.Key.Key_Backspace)
             self.assertEqual('', w.table.item(1, 2).text())
             w.edit_cells([(1, 1, '9')])
-            self.assertIn('3 van 6', w.progress.text())
+            self.assertIn('3/6', w.progress.text())
         finally:
             w.close()
 
@@ -1007,6 +1007,7 @@ class SimpleModeTests(unittest.TestCase):
             self.assertIn('Invoerroute:', labels)
             self.assertNotIn('Toets- en invoerinstellingen', labels)
             self.assertNotIn('Lager aantal? Extra gegevens blijven bewaard.', labels)
+            self.assertFalse(workspace.progress.wordWrap())
             for control in (workspace.direction, workspace.vertical_direction, workspace.begin_question,
                             workspace.block_size, workspace.precision):
                 self.assertGreater(workspace.table.geometry().top(), control.geometry().bottom())

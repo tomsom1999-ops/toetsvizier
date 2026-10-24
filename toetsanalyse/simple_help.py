@@ -39,7 +39,7 @@ TOPICS = [
      "Goed meerkeuzeantwoord = groen; fout antwoord = lichtrood. Gewone punten blijven wit, ook bij nul. "
      "N is lichtoranje. De actieve leerling en vraag en een volledig ingevuld totaal zijn blauw.</p>"
      "<p>Is de invoer ongeldig? De cel krijgt een rode rand en bovenaan staat wat u moet corrigeren. "
-     "Met Ga naar de eerste ontbrekende invoer springt u ook naar zo'n cel.</p>", "scores"),
+     "Met Eerste lege score springt u ook naar zo'n cel.</p>", "scores"),
     ("Vanuit Excel plakken", "<p><b>Alleen scores:</b> kopieer bijvoorbeeld twee rijen met elk drie scores uit Excel. "
      "Klik in Toetsvizier op de scorecel van de <b>eerste leerling, vraag 1</b> en druk op <b>Ctrl+V</b>.</p>"
      "<p><b>Namen én scores:</b> kopieer bijvoorbeeld <b>Sam | 2 | 0 | N</b> en <b>Alex | 1 | 2 | 2</b> "
@@ -190,7 +190,7 @@ class InputDemo(QWidget):
         self.progress = QWidget()
         progress_row = QHBoxLayout(self.progress)
         progress_row.setContentsMargins(0, 0, 0, 0)
-        progress_row.addWidget(QLabel("2 lln · 3 vragen · 5 van 6 · 1 open"), 1)
+        progress_row.addWidget(QLabel("2 lln · 3 vragen · 5/6 ingevuld · 1 open"), 1)
         progress_row.addWidget(button("Ongedaan maken"))
         progress_row.addWidget(button("Groot invoerscherm"))
         self.table = QTableWidget(3, 5)
