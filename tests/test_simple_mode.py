@@ -811,6 +811,13 @@ class SimpleModeTests(unittest.TestCase):
                 self.assertTrue(w.table.isVisible())
                 self.assertIs(w.table, table)
                 self.assertTrue(w.large_dialog.isAncestorOf(table))
+                self.assertFalse(w.large_dialog.isAncestorOf(w.question_count))
+                self.assertFalse(w.large_dialog.isAncestorOf(w.metadata_button))
+                self.assertFalse(w.large_dialog.isAncestorOf(w.mc_button))
+                from PySide6.QtWidgets import QPushButton
+                large_button_texts = {button.text() for button in w.large_dialog.findChildren(QPushButton)}
+                self.assertNotIn('Opslaan', large_button_texts)
+                self.assertIn('Terug naar hoofdscherm', large_button_texts)
                 w.direction.setCurrentIndex(w.direction.findData('vertical'))
                 w.vertical_direction.setCurrentIndex(w.vertical_direction.findData('up'))
                 w.edit_cells([(1, 1, '1')], advance=False)

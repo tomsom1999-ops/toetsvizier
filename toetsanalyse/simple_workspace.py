@@ -113,6 +113,8 @@ class SimpleWorkspace(QWidget):
         self.active_page = None
         self.projection = None
         self.large_dialog = None
+        self.large_progress = None
+        self.large_saved = None
         self.shortcuts = []
         self._confirming_editor = False
         root = QVBoxLayout(self)
@@ -149,6 +151,7 @@ class SimpleWorkspace(QWidget):
         self.input = InputScrollArea()
         body = QWidget()
         layout = QVBoxLayout(body)
+        self.input_layout = layout
         self.input.setWidget(body)
         hint = QLabel("Vul eerst maximumscores in. Typ leerlingnamen en scores, of kopieer cellen uit Excel en plak met Ctrl+V. "
                       "0 = geen punten · N = niet gemaakt · leeg = nog invullen. Del/Backspace wist geselecteerde scores. "
@@ -243,6 +246,7 @@ class SimpleWorkspace(QWidget):
         self.large_button.clicked.connect(self.open_large_input)
         table_actions.addWidget(self.large_button)
         layout.addLayout(table_actions)
+        self.table_layout_index = layout.count()
         layout.addWidget(self.table, 1)
         self.legend = QLabel()
         self.legend.setWordWrap(True)
@@ -289,20 +293,95 @@ class SimpleWorkspace(QWidget):
         screen = self.screen().availableGeometry()
         dialog.resize(min(1400, screen.width() - 40), min(900, screen.height() - 40))
         layout = QVBoxLayout(dialog)
-        self.stack.removeWidget(self.input)
-        layout.addWidget(self.input, 1)
-        self.input.show()
+
+        # Keep this view deliberately limited to score entry.  The normal
+        # screen remains the place for test setup, metadata and explanations.
+        controls = QHBoxLayout()
+        large_direction = QComboBox()
+        for index in range(self.direction.count()):
+            large_direction.addItem(self.direction.itemText(index), self.direction.itemData(index))
+        large_direction.setCurrentIndex(large_direction.findData(self.direction.currentData()))
+        controls.addWidget(large_direction)
+        large_vertical_direction = QComboBox()
+        for index in range(self.vertical_direction.count()):
+            large_vertical_direction.addItem(
+                self.vertical_direction.itemText(index), self.vertical_direction.itemData(index)
+            )
+        large_vertical_direction.setCurrentIndex(
+            large_vertical_direction.findData(self.vertical_direction.currentData())
+        )
+        controls.addWidget(large_vertical_direction)
+        large_begin_question = QComboBox()
+        for index in range(self.begin_question.count()):
+            large_begin_question.addItem(
+                self.begin_question.itemText(index), self.begin_question.itemData(index)
+            )
+        large_begin_question.setCurrentIndex(
+            max(0, large_begin_question.findData(self.begin_question.currentData()))
+        )
+        controls.addWidget(large_begin_question)
+        large_block_size = QSpinBox()
+        large_block_size.setRange(self.block_size.minimum(), self.block_size.maximum())
+        large_block_size.setPrefix(self.block_size.prefix())
+        large_block_size.setSuffix(self.block_size.suffix())
+        large_block_size.setValue(self.block_size.value())
+        controls.addWidget(large_block_size)
+        large_precision = QComboBox()
+        for index in range(self.precision.count()):
+            large_precision.addItem(self.precision.itemText(index), self.precision.itemData(index))
+        large_precision.setCurrentIndex(large_precision.findData(self.precision.currentData()))
+        controls.addWidget(large_precision)
+        controls.addStretch()
+        large_undo = set_button_role(QPushButton('Ongedaan maken'), 'secondary')
+        large_undo.clicked.connect(self.undo)
+        controls.addWidget(large_undo)
+        large_missing = set_button_role(QPushButton('Eerste lege score'), 'secondary')
+        large_missing.clicked.connect(self.go_missing)
+        controls.addWidget(large_missing)
+        layout.addLayout(controls)
+
+        def refresh_large_route_controls():
+            route = large_direction.currentData()
+            large_vertical_direction.setVisible(route in ('vertical', 'hybrid'))
+            large_begin_question.setVisible(route == 'hybrid')
+            large_block_size.setVisible(route == 'hybrid')
+
+        large_direction.currentIndexChanged.connect(
+            lambda: self.direction.setCurrentIndex(self.direction.findData(large_direction.currentData()))
+        )
+        large_direction.currentIndexChanged.connect(refresh_large_route_controls)
+        large_vertical_direction.currentIndexChanged.connect(
+            lambda: self.vertical_direction.setCurrentIndex(
+                self.vertical_direction.findData(large_vertical_direction.currentData())
+            )
+        )
+        large_begin_question.currentIndexChanged.connect(
+            lambda: self.begin_question.setCurrentIndex(
+                self.begin_question.findData(large_begin_question.currentData())
+            )
+        )
+        large_block_size.valueChanged.connect(self.block_size.setValue)
+        large_precision.currentIndexChanged.connect(
+            lambda: self.precision.setCurrentIndex(self.precision.findData(large_precision.currentData()))
+        )
+        refresh_large_route_controls()
+
+        self.large_progress = QLabel(self.progress.text())
+        self.large_progress.setWordWrap(True)
+        layout.addWidget(self.large_progress)
+        self.input_layout.removeWidget(self.table)
+        layout.addWidget(self.table, 1)
+        self.table.show()
+        large_legend = QLabel(self.legend.text())
+        large_legend.setWordWrap(True)
+        layout.addWidget(large_legend)
         self.large_saved = QLabel(self.saved.text())
         self.large_saved.setWordWrap(True)
         layout.addWidget(self.large_saved)
         buttons = QHBoxLayout()
-        save = QPushButton('Opslaan')
-        set_button_role(save, 'primary')
-        save.clicked.connect(lambda: self.save())
         back = QPushButton('Terug naar hoofdscherm')
-        set_button_role(back, 'secondary')
+        set_button_role(back, 'primary')
         back.clicked.connect(dialog.accept)
-        buttons.addWidget(save)
         buttons.addStretch()
         buttons.addWidget(back)
         layout.addLayout(buttons)
@@ -319,9 +398,8 @@ class SimpleWorkspace(QWidget):
             dialog.exec()
         finally:
             self.commit_input_editor()
-            layout.removeWidget(self.input)
-            self.stack.insertWidget(0, self.input)
-            self.stack.setCurrentWidget(self.input)
+            layout.removeWidget(self.table)
+            self.input_layout.insertWidget(self.table_layout_index, self.table, 1)
             self.large_dialog = None
             self.large_button.show()
             for shortcut in self.shortcuts:
@@ -505,6 +583,7 @@ class SimpleWorkspace(QWidget):
         self.setWindowTitle(title)
         self.title_changed.emit(title)
         if self.large_dialog is not None:
+            self.large_progress.setText(self.progress.text())
             self.large_saved.setText(self.saved.text())
             self.large_dialog.setWindowTitle('Groot invoerscherm · ' + title)
 
