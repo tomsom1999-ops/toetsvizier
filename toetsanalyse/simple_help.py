@@ -159,7 +159,6 @@ class InputDemo(QWidget):
             counter.setValue(value)
             counter.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             count_row.addWidget(counter)
-        count_row.addWidget(QLabel("Lager aantal? Extra gegevens blijven bewaard."))
         count_row.addStretch()
         layout.addWidget(QLabel('<b>Toets instellen</b>'))
         layout.addWidget(self.counts)
@@ -194,8 +193,6 @@ class InputDemo(QWidget):
         progress_row.addWidget(QLabel("2 lln · 3 vragen · 5 van 6 · 1 open"), 1)
         progress_row.addWidget(button("Ongedaan maken"))
         progress_row.addWidget(button("Groot invoerscherm"))
-        layout.addWidget(self.progress)
-
         self.table = QTableWidget(3, 5)
         self.table.setHorizontalHeaderLabels(["Leerlingnaam", "Vraag 1", "Vraag 2", "Vraag 3\nSleutel: B", "Totaal"])
         self.table.horizontalHeader().setMinimumHeight(42)
@@ -216,6 +213,7 @@ class InputDemo(QWidget):
             self.table.setColumnWidth(c, 80)
         self.table.setMinimumHeight(150)
         layout.addWidget(self.table, 1)
+        layout.addWidget(self.progress)
         self.legend = QLabel("Kleurenlegenda: blauw = actief/maximum/totaal · wit = punten · groen = goed antwoord · "
                              "lichtrood = fout antwoord · lichtoranje = N · rode rand = ongeldige invoer")
         self.legend.setWordWrap(True)

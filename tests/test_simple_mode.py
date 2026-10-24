@@ -1006,11 +1006,12 @@ class SimpleModeTests(unittest.TestCase):
             self.assertIn('Toets instellen', labels)
             self.assertIn('Invoerroute:', labels)
             self.assertNotIn('Toets- en invoerinstellingen', labels)
+            self.assertNotIn('Lager aantal? Extra gegevens blijven bewaard.', labels)
             for control in (workspace.direction, workspace.vertical_direction, workspace.begin_question,
                             workspace.block_size, workspace.precision):
                 self.assertGreater(workspace.table.geometry().top(), control.geometry().bottom())
-            self.assertGreater(workspace.table.geometry().top(), workspace.progress.geometry().bottom())
-            self.assertGreaterEqual(workspace.table.height(), 260)
+            self.assertGreater(workspace.progress.geometry().top(), workspace.table.geometry().bottom())
+            self.assertGreaterEqual(workspace.table.height(), 220)
             for button in workspace.input.findChildren(QPushButton):
                 if button.isVisible():
                     self.assertLessEqual(button.mapTo(workspace, button.rect().topRight()).x(), workspace.width())
