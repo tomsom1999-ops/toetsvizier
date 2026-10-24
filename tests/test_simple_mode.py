@@ -231,6 +231,7 @@ class SimpleModeTests(unittest.TestCase):
         from toetsanalyse.simple_workspace import SimpleWorkspace
         workspace = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / "keys.ini"), QSettings.Format.IniFormat))
         workspace.show()
+        workspace.precision.setCurrentIndex(workspace.precision.findData(.5))
         self.app.processEvents()
         for mode, expected in (("horizontal", (1, 2)), ("vertical", (2, 1))):
             workspace.direction.setCurrentIndex(workspace.direction.findData(mode))
@@ -246,6 +247,140 @@ class SimpleModeTests(unittest.TestCase):
         workspace.advance(1, 3)
         self.assertEqual((2, 3), (workspace.table.currentRow(), workspace.table.currentColumn()))
         workspace.close()
+
+    def test_whole_scores_advance_per_question_up_to_nine_and_confirm_above_nine(self):
+        self.qt()
+        self.fill()
+        from PySide6.QtCore import QSettings, Qt
+        from PySide6.QtTest import QTest
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        w = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / 'quick.ini'), QSettings.Format.IniFormat))
+        w.show()
+        self.app.processEvents()
+        try:
+            for mode, expected in [('horizontal', (1, 2)), ('vertical', (2, 1)), ('hybrid', (1, 2))]:
+                w.direction.setCurrentIndex(w.direction.findData(mode))
+                w.table.setCurrentCell(1, 1)
+                w.table.setFocus()
+                QTest.keyClicks(w.table, '1')
+                self.app.processEvents()
+                self.assertEqual(expected, (w.table.currentRow(), w.table.currentColumn()))
+                self.assertEqual('1', w.table.item(1, 1).text())
+            w.direction.setCurrentIndex(w.direction.findData('horizontal'))
+            w.edit_cells([(0, 1, '12')])
+            w.table.setCurrentCell(1, 1)
+            QTest.keyClicks(w.table, '1')
+            self.app.processEvents()
+            self.assertEqual((1, 1), (w.table.currentRow(), w.table.currentColumn()))
+            QTest.keyClicks(w.table.focusWidget(), '2')
+            self.app.processEvents()
+            self.assertEqual((1, 1), (w.table.currentRow(), w.table.currentColumn()))
+            QTest.keyClick(w.table.focusWidget(), Qt.Key.Key_Return)
+            self.app.processEvents()
+            self.assertEqual('12', w.table.item(1, 1).text())
+            self.assertEqual((1, 2), (w.table.currentRow(), w.table.currentColumn()))
+            QTest.keyClicks(w.table, '2')
+            self.app.processEvents()
+            self.assertEqual((1, 3), (w.table.currentRow(), w.table.currentColumn()))
+            w.edit_cells([(0, 3, '9')])
+            w.table.setCurrentCell(1, 3)
+            QTest.keyClicks(w.table, '9')
+            self.app.processEvents()
+            self.assertEqual('9', w.table.item(1, 3).text())
+            self.assertNotEqual((1, 3), (w.table.currentRow(), w.table.currentColumn()))
+            w.table.setCurrentCell(1, 3)
+            QTest.keyClick(w.table, Qt.Key.Key_F2)
+            QTest.keyClicks(w.table.focusWidget(), '8')
+            self.app.processEvents()
+            self.assertEqual('8', w.table.item(1, 3).text())
+            self.assertNotEqual((1, 3), (w.table.currentRow(), w.table.currentColumn()))
+            w.precision.setCurrentIndex(w.precision.findData(.5))
+            w.table.setCurrentCell(1, 2)
+            QTest.keyClicks(w.table, '1')
+            self.app.processEvents()
+            self.assertEqual((1, 2), (w.table.currentRow(), w.table.currentColumn()))
+            QTest.keyClick(w.table.focusWidget(), Qt.Key.Key_Escape)
+        finally:
+            w.close()
+
+    def test_input_colors_match_extended_and_highlight_active_headers(self):
+        self.qt()
+        from PySide6.QtCore import QSettings
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        questions = active_questions(self.db)
+        students = active_students(self.db)
+        with self.db.connection:
+            self.db.connection.execute('UPDATE matrix_questions SET maximum_score=2 WHERE test_id=1')
+            self.db.connection.execute("UPDATE matrix_questions SET is_multiple_choice=1, multiple_choice_answer='B' WHERE id=?", (questions[1]['id'],))
+            for student, values in zip(students, [('0', 'A', 'N'), ('1', 'B', '2')]):
+                for q, raw in zip(questions, values):
+                    save_score(self.db, 1, student['id'], q['id'], raw, commit=False)
+        w = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / 'colors.ini'), QSettings.Format.IniFormat))
+        try:
+            color = lambda r, c: w.table.item(r, c).background().color().name()
+            self.assertEqual('#ffffff', color(1, 1))  # A numeric zero is not a wrong answer.
+            self.assertEqual('#fdecec', color(1, 2))
+            self.assertEqual('#e8f7e8', color(2, 2))
+            self.assertEqual('#fff8ed', color(1, 3))
+            self.assertEqual('#dbeafe', color(0, 1))
+            self.assertEqual('#dbeafe', color(1, 4))
+            self.assertTrue(w.table.item(1, 4).font().bold())
+            w.table.setCurrentCell(1, 2)
+            self.assertEqual(1, w.table.verticalHeader().active_row)
+            self.assertEqual(2, w.table.horizontalHeader().active_column)
+            self.assertEqual('#dbeafe', color(1, 0))
+            w.table.setCurrentCell(2, 3)
+            self.assertEqual('#ffffff', color(1, 0))
+            self.assertEqual('#dbeafe', color(2, 0))
+            w.clear_scores([(1, 1)])
+            self.assertEqual('#edf2f7', color(1, 4))
+            self.assertFalse(w.table.item(1, 4).font().bold())
+            self.assertFalse(w.edit_cells([(1, 1, '3')]))
+            self.assertIn((1, 1), w.invalid)
+            self.assertTrue(w.table.item(1, 1).toolTip())
+            self.assertIn('rode rand', w.legend.text())
+        finally:
+            w.close()
+
+    def test_delete_clears_scores_atomically_preserves_names_maxima_and_can_undo(self):
+        self.qt()
+        self.fill()
+        from PySide6.QtCore import QSettings, Qt
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QTableWidgetSelectionRange
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        path = Path(self.temp.name) / 'delete.tviz'
+        save_as(self.db, path)
+        w = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / 'delete.ini'), QSettings.Format.IniFormat))
+        w.show()
+        self.app.processEvents()
+        try:
+            original = stored_results(self.db, 1)
+            name = w.table.item(1, 0).text()
+            w.table.setCurrentCell(1, 1)
+            w.table.setRangeSelected(QTableWidgetSelectionRange(0, 0, 2, 3), True)
+            QTest.keyClick(w.table, Qt.Key.Key_Delete)
+            self.app.processEvents()
+            self.assertEqual(name, w.table.item(1, 0).text())
+            self.assertEqual('2', w.table.item(0, 1).text())
+            self.assertEqual('', w.table.item(1, 1).text())
+            self.assertEqual('', w.table.item(2, 3).text())
+            self.assertFalse(w.analysis_button.isEnabled())
+            reopened = open_analysis(path)
+            try:
+                self.assertFalse(completion(reopened)['ready'])
+            finally:
+                reopened.close()
+            w.undo()
+            self.assertEqual(original, stored_results(self.db, 1))
+            w.table.setCurrentCell(1, 1)
+            QTest.keyClick(w.table, Qt.Key.Key_F2)
+            QTest.keyClick(w.table.focusWidget(), Qt.Key.Key_Delete)
+            self.app.processEvents()
+            self.assertEqual('', w.table.item(1, 1).text())
+            self.assertEqual((1, 1), (w.table.currentRow(), w.table.currentColumn()))
+        finally:
+            w.close()
 
     def test_open_modules_with_hidden_data_and_return_to_input(self):
         self.qt()

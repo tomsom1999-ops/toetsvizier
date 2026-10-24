@@ -22,14 +22,20 @@ TOPICS = [
      "Leerling verwijderen. Dat is anders dan het aantal verlagen: verwijderen haalt de leerling en scores weg, "
      "na uw bevestiging. Een vergissing kunt u herstellen met Ongedaan maken.</p>", "names"),
     ("Punten, nul, N of een letter", "<p>Typ de behaalde punten in de cel van de leerling en de vraag. "
-     "Druk op <b>Enter</b> of <b>Tab</b> om verder te gaan.</p>"
+     "Bij <b>hele punten</b> springt u automatisch verder als het maximum <b>voor die vraag hoogstens 9</b> is. "
+     "Heeft de vraag een hoger maximum? Bevestig uw score met <b>Enter</b> of <b>Tab</b>. "
+     "Bij decimalen bevestigt u met Enter of Tab.</p>"
+     "<p><b>Delete (Del)</b> wist de geselecteerde scores, ook tijdens het bewerken. "
+     "De cellen worden weer leeg, niet nul. Met <b>Ctrl+Z</b> herstelt u een vergissing.</p>"
      "<p><b>2</b> = twee punten. <b>0</b> = de vraag is gemaakt, maar levert geen punten op. "
      "<b>N</b> = niet gemaakt: nul punten, maar apart herkenbaar in de analyse. "
      "Een <b>lege cel</b> betekent dat u nog iets moet invullen.</p>"
      "<p>Standaard gebruikt u <b>hele punten</b>. Kies Halve punten, Kwartpunten of Tiende punten als dat nodig is; "
      "voer dan bijvoorbeeld <b>1,5</b> in. U kunt nooit meer punten geven dan de maximumscore.</p>"
      "<p>Bij een ingestelde meerkeuzevraag voert u de <b>gekozen antwoordletter</b> in. "
-     "Is de invoer ongeldig? De cel wordt rood en bovenaan staat wat u moet corrigeren. "
+     "Goed meerkeuzeantwoord = groen; fout antwoord = lichtrood. Gewone punten blijven wit, ook bij nul. "
+     "N is lichtoranje. De actieve leerling en vraag en een volledig ingevuld totaal zijn blauw.</p>"
+     "<p>Is de invoer ongeldig? De cel krijgt een rode rand en bovenaan staat wat u moet corrigeren. "
      "Met Ga naar de eerste ontbrekende invoer springt u ook naar zo'n cel.</p>", "scores"),
     ("Vanuit Excel plakken", "<p><b>Alleen scores:</b> kopieer bijvoorbeeld twee rijen met elk drie scores uit Excel. "
      "Klik in Toetsvizier op de scorecel van de <b>eerste leerling, vraag 1</b> en druk op <b>Ctrl+V</b>.</p>"
@@ -120,7 +126,7 @@ class InputDemo(QWidget):
             for c, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                item.setBackground(QColor("#dbeafe" if r == 0 else "#ede9fe" if value == "N" else "#edf2f7" if c == 4 else "#dcfce7" if c > 0 else "#ffffff"))
+                item.setBackground(QColor("#dbeafe" if r == 0 or c == 4 else "#fff8ed" if value == "N" else "#ffffff"))
                 self.table.setItem(r, c, item)
         self.table.setColumnWidth(0, 185)
         for c in range(1, 5):

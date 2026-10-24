@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, Signal, QTimer
-from PySide6.QtGui import QColor, QKeySequence, QShortcut
+from PySide6.QtGui import QColor, QKeySequence, QShortcut, QPen
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFileDialog,
     QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox,
     QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QStyledItemDelegate,
@@ -24,7 +24,41 @@ class ScoreEntryDelegate(QStyledItemDelegate):
         super().__init__(workspace.table)
         self.workspace = workspace
 
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+        invalid = (index.row(), index.column()) in self.workspace.invalid
+        active = index == self.workspace.table.currentIndex()
+        if invalid or active:
+            painter.save()
+            painter.setPen(QPen(QColor('#dc2626' if invalid else '#2563eb'), 2))
+            painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
+            painter.restore()
+
+    def createEditor(self, parent, option, index):
+        editor = super().createEditor(parent, option, index)
+        if isinstance(editor, QLineEdit):
+            row, col = index.row(), index.column()
+            def edited(text):
+                if self.workspace.quick_score_complete(row, col, text):
+                    QTimer.singleShot(0, lambda: self.finish_quick_score(editor, row, col))
+            editor.textEdited.connect(edited)
+        return editor
+
+    def finish_quick_score(self, editor, row, col):
+        from shiboken6 import isValid
+        if (not isValid(editor) or not editor.isVisible()
+                or not self.workspace.quick_score_complete(row, col, editor.text())):
+            return
+        self.commitData.emit(editor)
+        if isValid(editor):
+            self.closeEditor.emit(editor, QAbstractItemDelegate.EndEditHint.NoHint)
+
     def eventFilter(self, editor, event):
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Delete:
+            row, col = self.workspace.table.currentRow(), self.workspace.table.currentColumn()
+            if self.workspace.is_score_cell(row, col):
+                self.workspace.clear_scores([(row, col)])
+                return True
         if event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab):
             row, col = self.workspace.table.currentRow(), self.workspace.table.currentColumn()
             self.commitData.emit(editor)
@@ -83,7 +117,9 @@ class SimpleWorkspace(QWidget):
         self.input = QWidget()
         layout = QVBoxLayout(self.input)
         hint = QLabel("Vul eerst maximumscores in. Typ leerlingnamen en scores, of kopieer cellen uit Excel en plak met Ctrl+V. "
-                      "0 = geen punten · N = niet gemaakt · leeg = nog invullen. Afwezige leerlingen neemt u niet op.")
+                      "0 = geen punten · N = niet gemaakt · leeg = nog invullen. Del wist geselecteerde scores. "
+                      "Bij hele punten en maximaal 9 punten voor de vraag springt u automatisch verder. "
+                      "Afwezige leerlingen neemt u niet op.")
         hint.setWordWrap(True)
         layout.addWidget(hint)
         actions = WrappingLayout()
@@ -122,6 +158,9 @@ class SimpleWorkspace(QWidget):
         self.direction.currentIndexChanged.connect(lambda: self.block_size.setVisible(self.direction.currentData() == "hybrid"))
         actions.addWidget(self.block_size)
         self.precision = QComboBox()
+        self.precision.setToolTip("Hele punten: automatisch verder bij vragen met een maximum van hoogstens 9. "
+                                 "Bij een hoger maximum bevestigt u met Enter of Tab. "
+                                 "Bij decimalen bevestigt u met Enter of Tab.")
         for label, value in (("Hele punten", 1.0), ("Halve punten", .5), ("Kwartpunten", .25), ("Tiende punten", .1)):
             self.precision.addItem(label, value)
         self.precision.setCurrentIndex(max(0, self.precision.findData(float(database.meta("score_step", "1")))))
@@ -134,13 +173,17 @@ class SimpleWorkspace(QWidget):
             actions.addWidget(button)
         layout.addLayout(actions)
         self.table = QTableWidget()
+        from .results_page import ActiveStudentHeader, ActiveQuestionHeader
+        self.table.setVerticalHeader(ActiveStudentHeader(self.table))
+        self.table.setHorizontalHeader(ActiveQuestionHeader(self.table))
         self.table.setItemDelegate(ScoreEntryDelegate(self))
+        self.table.currentCellChanged.connect(self.highlight_current)
         self.table.setAlternatingRowColors(False)
         self.table.cellChanged.connect(self.cell_changed)
         self.table.installEventFilter(self)
         self.table.setSelectionMode(QTableWidget.SelectionMode.ContiguousSelection)
         layout.addWidget(self.table, 1)
-        self.legend = QLabel("Kleurenlegenda: blauw = maximumscore · wit = nog leeg · groen = ingevuld · paars = N, niet gemaakt · rood = ongeldige invoer.")
+        self.legend = QLabel()
         self.legend.setWordWrap(True)
         layout.addWidget(self.legend)
         self.first_missing = QPushButton("Ga naar de eerste ontbrekende invoer")
@@ -200,10 +243,23 @@ class SimpleWorkspace(QWidget):
                 value = scores.get((student["id"], q["id"]))
                 response = responses.get((student["id"], q["id"]), "")
                 raw = response if response or q["is_multiple_choice"] else "" if value is None else f"{value:g}"
-                self.set_cell(row, col, raw, "#ede9fe" if raw == "N" else "#dcfce7" if value is not None else "#ffffff")
+                color, foreground = '#ffffff', '#1f3352'
+                if raw == 'N':
+                    color, foreground = '#fff8ed', '#9a6a1d'
+                elif q['is_multiple_choice'] and raw and value is not None:
+                    correct = value == q['maximum_score']
+                    color, foreground = ('#e8f7e8', '#1f7a1f') if correct else ('#fdecec', '#a02828')
+                self.set_cell(row, col, raw, color)
+                self.table.item(row, col).setForeground(QColor(foreground))
             values = [scores.get((student["id"], q["id"])) for q in self.questions]
             total = sum(value for value in values if value is not None) if any(value is not None for value in values) else None
-            self.set_cell(row, len(self.questions) + 1, "" if total is None else f"{total:g}", "#edf2f7", False)
+            complete = bool(values) and all(value is not None for value in values) and not any(r == row for r, _ in self.invalid)
+            self.set_cell(row, len(self.questions) + 1, "" if total is None else f"{total:g}", "#dbeafe" if complete else "#edf2f7", False)
+            total_cell = self.table.item(row, len(self.questions) + 1)
+            total_cell.setForeground(QColor('#1d4ed8' if complete else '#1f3352'))
+            font = total_cell.font()
+            font.setBold(complete)
+            total_cell.setFont(font)
         new = len(self.students) + 1
         for col in range(len(self.questions) + 2):
             self.set_cell(new, col, "Verhoog Aantal leerlingen voor de bewaarde rijen" if hidden_students and col == 0 else "", editable=not hidden_students and col <= len(self.questions))
@@ -214,11 +270,32 @@ class SimpleWorkspace(QWidget):
             self.table.setColumnWidth(col, 95)
             q = self.questions[col - 1]
             self.table.horizontalHeaderItem(col).setToolTip("Antwoordletter invullen. Juiste antwoord: " + str(q["multiple_choice_answer"]) if q["is_multiple_choice"] else "Punten invullen, of N voor niet gemaakt.")
-        for (row, col), (raw, _) in self.invalid.items():
+        for (row, col), (raw, message) in self.invalid.items():
             if row < self.table.rowCount() and col < self.table.columnCount():
-                self.set_cell(row, col, raw, "#fecaca")
+                self.set_cell(row, col, raw)
+                self.table.item(row, col).setToolTip(message)
         self.loading = False
+        self.highlight_current(self.table.currentRow(), self.table.currentColumn())
         self.update_status()
+
+    def highlight_current(self, row, col, previous_row=-1, previous_col=-1):
+        if self.loading:
+            return
+        self.table.verticalHeader().set_active_row(row if 1 <= row <= len(self.students) else -1)
+        self.table.horizontalHeader().set_active_column(col if 1 <= col <= len(self.questions) else -1)
+        blocked = self.table.blockSignals(True)
+        try:
+            for r in {previous_row, row}:
+                if 1 <= r <= len(self.students):
+                    cell = self.table.item(r, 0)
+                    if cell is not None:
+                        cell.setBackground(QColor('#dbeafe' if r == row else '#ffffff'))
+                        font = cell.font()
+                        font.setBold(r == row)
+                        cell.setFont(font)
+        finally:
+            self.table.blockSignals(blocked)
+        self.table.viewport().update()
 
     def set_cell(self, row, col, value, color="#ffffff", editable=True):
         cell = QTableWidgetItem(str(value))
@@ -254,11 +331,14 @@ class SimpleWorkspace(QWidget):
         self.status.setText(message)
         self.norm_button.setToolTip(message if not ready else "Kies de normering voor deze toets.")
         self.analysis_button.setToolTip(message if not ready or partial else "Bekijk de volledige analyse van deze toets, inclusief cijfers.")
-        self.legend.setText("Kleurenlegenda: blauw = maximumscore · wit = nog leeg · groen = ingevuld · paars = N, niet gemaakt · rood = ongeldige invoer. Oranje analyseknop = normering nog niet vastgesteld.")
+        self.legend.setText("Kleurenlegenda: blauw = actieve leerling en vraag, maximumscores en volledig ingevuld totaal · "
+                            "wit = gewone punten of leeg · groen = goed meerkeuzeantwoord · lichtrood = fout meerkeuzeantwoord · "
+                            "lichtoranje = N, niet gemaakt · rode rand = ongeldige invoer. "
+                            "Oranje analyseknop = normering nog niet vastgesteld.")
         self.first_missing.setEnabled(not ready)
         self.undo_button.setEnabled(bool(self.history) or bool(self.invalid))
         if self.invalid:
-            self.saved.setText("Ongeldige invoer is nog niet opgeslagen. Corrigeer de rode cel of gebruik Ongedaan maken.")
+            self.saved.setText("Ongeldige invoer is nog niet opgeslagen. Corrigeer de cel met de rode rand of gebruik Ongedaan maken.")
         elif self.is_saved:
             self.saved.setText("Alles opgeslagen · " + str(self.database.path))
         else:
@@ -316,7 +396,7 @@ class SimpleWorkspace(QWidget):
             return
         self.edit_cells([(row, col, raw)])
 
-    def edit_cells(self, entries):
+    def edit_cells(self, entries, *, advance=True):
         before = self.snapshot()
         row = col = 0
         raw = ""
@@ -335,9 +415,31 @@ class SimpleWorkspace(QWidget):
         for row, col, _ in entries:
             self.invalid.pop((row, col), None)
         self.refresh()
-        if entries:
+        if entries and advance:
             self.advance(entries[-1][0], entries[-1][1])
         return True
+
+    def is_score_cell(self, row, col):
+        return 1 <= row <= len(self.students) and 1 <= col <= len(self.questions)
+
+    def quick_score_complete(self, row, col, text):
+        if not self.is_score_cell(row, col) or self.precision.currentData() != 1.0:
+            return False
+        q = self.questions[col - 1]
+        if q['is_multiple_choice'] or not text.isascii() or not text.isdigit():
+            return False
+        value = int(text)
+        maximum = float(q['maximum_score'] or 0)
+        return 0 < maximum <= 9 and value <= maximum
+
+    def clear_scores(self, cells=None):
+        row, col = self.table.currentRow(), self.table.currentColumn()
+        if cells is None:
+            cells = [(i.row(), i.column()) for i in self.table.selectedIndexes()]
+        entries = [(r, c, '') for r, c in cells if self.is_score_cell(r, c)]
+        if entries:
+            self.edit_cells(entries, advance=False)
+            self.table.setCurrentCell(row, col)
 
     def advance(self, row, col):
         direction = self.direction.currentData()
@@ -357,6 +459,15 @@ class SimpleWorkspace(QWidget):
 
     def eventFilter(self, watched, event):
         if watched is self.table and event.type() == QEvent.Type.KeyPress:
+            if self.table.state() != QTableWidget.State.EditingState:
+                if event.key() == Qt.Key.Key_Delete:
+                    self.clear_scores()
+                    return True
+                row, col = self.table.currentRow(), self.table.currentColumn()
+                if (not event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.MetaModifier)
+                        and self.quick_score_complete(row, col, event.text())):
+                    self.edit_cells([(row, col, event.text())])
+                    return True
             if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self.table.state() != QTableWidget.State.EditingState:
                 self.advance(self.table.currentRow(), self.table.currentColumn())
                 return True
@@ -533,7 +644,7 @@ class SimpleWorkspace(QWidget):
         self.commit_input_editor()
         self.rename()
         if self.invalid:
-            QMessageBox.warning(self, "Invoer corrigeren", "Corrigeer eerst de rode invoercellen. De overige wijzigingen zijn wel bewaard als u al een bestand gekozen heeft.")
+            QMessageBox.warning(self, "Invoer corrigeren", "Corrigeer eerst de invoercellen met een rode rand. De overige wijzigingen zijn wel bewaard als u al een bestand gekozen heeft.")
             return False
         if choose or not self.is_saved:
             path, _ = QFileDialog.getSaveFileName(self, "Analyse opslaan", self.name.text().strip() + SIMPLE_SUFFIX, "Toetsvizier-analyse (*.tviz)")
@@ -554,7 +665,7 @@ class SimpleWorkspace(QWidget):
         self.commit_input_editor()
         self.rename()
         if self.invalid:
-            if question(self, "Ongeldige invoer", "De rode invoer is niet opgeslagen. Toch sluiten?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            if question(self, "Ongeldige invoer", "De invoer met een rode rand is niet opgeslagen. Toch sluiten?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
                 return False
         if not self.is_saved:
             answer = question(self, "Analyse bewaren", "Wilt u deze analyse opslaan voordat u sluit?", QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel, QMessageBox.StandardButton.Save)
@@ -632,7 +743,7 @@ class SimpleWorkspace(QWidget):
     def export_excel(self):
         self.commit_input_editor()
         if self.invalid:
-            QMessageBox.warning(self, "Invoer corrigeren", "Corrigeer eerst de rode cellen voordat u exporteert.")
+            QMessageBox.warning(self, "Invoer corrigeren", "Corrigeer eerst de cellen met een rode rand voordat u exporteert.")
             return
         path, _ = QFileDialog.getSaveFileName(self, "Exporteren naar Excel", self.name.text() + ".xlsx", "Excelbestand (*.xlsx)")
         if not path:
