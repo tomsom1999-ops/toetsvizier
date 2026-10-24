@@ -342,6 +342,154 @@ class SimpleModeTests(unittest.TestCase):
         finally:
             w.close()
 
+    def test_vertical_snake_route_native_confirmation_and_final_cell(self):
+        self.qt()
+        self.fill()
+        from PySide6.QtCore import QSettings, Qt
+        from PySide6.QtTest import QTest
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        w = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / 'snake.ini'), QSettings.Format.IniFormat))
+        w.show()
+        self.app.processEvents()
+        try:
+            w.direction.setCurrentIndex(w.direction.findData('vertical'))
+            w.table.setCurrentCell(2, 1)
+            w.table.setFocus()
+            QTest.keyClick(w.table, Qt.Key.Key_F2)
+            QTest.keyClick(w.table.focusWidget(), Qt.Key.Key_Return)  # Unchanged score: still advance exactly once.
+            self.assertEqual((2, 2), (w.table.currentRow(), w.table.currentColumn()))
+            self.assertEqual('up', w.vertical_direction.currentData())
+            for key, expected in zip([Qt.Key.Key_Tab, Qt.Key.Key_Return, Qt.Key.Key_Tab, Qt.Key.Key_Return],
+                                     [(1, 2), (1, 3), (2, 3), (2, 3)]):
+                QTest.keyClick(w.table, key)
+                self.assertEqual(expected, (w.table.currentRow(), w.table.currentColumn()))
+            w.direction.setCurrentIndex(w.direction.findData('horizontal'))
+            w.table.setCurrentCell(1, 3)
+            w.advance(1, 3)
+            self.assertEqual((2, 1), (w.table.currentRow(), w.table.currentColumn()))
+            w.advance(2, 3)
+            self.assertEqual((2, 1), (w.table.currentRow(), w.table.currentColumn()))
+        finally:
+            w.close()
+
+    def test_hybrid_begin_question_snake_blocks_and_hidden_count_change(self):
+        self.qt()
+        from PySide6.QtCore import QSettings
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        with self.db.connection:
+            set_counts(self.db, 5, 2)
+        self.fill()
+        w = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / 'blocks.ini'), QSettings.Format.IniFormat))
+        try:
+            w.direction.setCurrentIndex(w.direction.findData('hybrid'))
+            w.block_size.setValue(2)
+            w.begin_question.setCurrentIndex(w.begin_question.findData(2))
+            w.table.setCurrentCell(1, 2)
+            for expected in [(1, 3), (2, 2), (2, 3), (2, 4), (2, 5), (1, 4), (1, 5), (1, 5)]:
+                w.advance(w.table.currentRow(), w.table.currentColumn())
+                self.assertEqual(expected, (w.table.currentRow(), w.table.currentColumn()))
+            self.assertEqual(4, w.begin_question.currentData())
+            self.assertEqual('up', w.vertical_direction.currentData())
+            w.question_count.setValue(2)
+            w.change_counts()
+            self.assertEqual(1, w.begin_question.currentData())
+            self.assertEqual(2, w.begin_question.count())
+        finally:
+            w.close()
+
+    def test_direct_n_letters_backspace_and_progress(self):
+        self.qt()
+        self.fill()
+        from PySide6.QtCore import QSettings, Qt
+        from PySide6.QtTest import QTest
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        qs = active_questions(self.db)
+        with self.db.connection:
+            self.db.connection.execute('DELETE FROM scores WHERE question_id=?', (qs[1]['id'],))
+            self.db.connection.execute("UPDATE matrix_questions SET is_multiple_choice=1,multiple_choice_answer='B' WHERE id=?", (qs[1]['id'],))
+        w = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / 'letters.ini'), QSettings.Format.IniFormat))
+        w.show()
+        self.app.processEvents()
+        try:
+            self.assertIn('4 van 6', w.progress.text())
+            w.precision.setCurrentIndex(w.precision.findData(.5))
+            w.table.setCurrentCell(1, 1)
+            w.table.setFocus()
+            QTest.keyClicks(w.table, 'n')
+            self.assertEqual('N', w.table.item(1, 1).text())
+            self.assertEqual((1, 2), (w.table.currentRow(), w.table.currentColumn()))
+            QTest.keyClicks(w.table, 'b')
+            self.assertEqual('B', w.table.item(1, 2).text())
+            self.assertEqual('#e8f7e8', w.table.item(1, 2).background().color().name())
+            self.assertIn('5 van 6', w.progress.text())
+            w.table.setCurrentCell(1, 2)
+            QTest.keyClick(w.table, Qt.Key.Key_Backspace)
+            self.assertEqual('', w.table.item(1, 2).text())
+            self.assertIn('4 van 6', w.progress.text())
+            w.undo()
+            self.assertEqual('B', w.table.item(1, 2).text())
+            w.table.setCurrentCell(1, 2)
+            QTest.keyClick(w.table, Qt.Key.Key_F2)
+            QTest.keyClick(w.table.focusWidget(), Qt.Key.Key_Backspace)
+            self.assertEqual('', w.table.item(1, 2).text())
+            w.edit_cells([(1, 1, '9')])
+            self.assertIn('3 van 6', w.progress.text())
+        finally:
+            w.close()
+
+    def test_large_input_reuses_table_shortcuts_state_and_returns_without_data_loss(self):
+        self.qt()
+        self.fill()
+        from PySide6.QtCore import QSettings, QTimer, Qt
+        from PySide6.QtTest import QTest
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        w = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / 'large.ini'), QSettings.Format.IniFormat))
+        w.show()
+        self.app.processEvents()
+        table = w.table
+        errors = []
+        def inspect_dialog():
+            try:
+                self.assertIsNotNone(w.large_dialog)
+                self.assertTrue(w.input.isVisible())
+                self.assertTrue(w.table.isVisible())
+                self.assertIs(w.table, table)
+                self.assertTrue(w.large_dialog.isAncestorOf(table))
+                w.direction.setCurrentIndex(w.direction.findData('vertical'))
+                w.vertical_direction.setCurrentIndex(w.vertical_direction.findData('up'))
+                w.edit_cells([(1, 1, '1')], advance=False)
+                table.setFocus()
+                QTest.keyClick(table, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+                self.app.processEvents()
+                self.assertEqual('2', table.item(1, 1).text())
+                w.table.setCurrentCell(2, 1)
+                from PySide6.QtWidgets import QApplication
+                QApplication.clipboard().setText('1')
+                QTest.keyClick(table, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+                self.app.processEvents()
+                self.assertEqual('1', table.item(2, 1).text())
+                w.undo()
+                self.assertEqual('2', table.item(2, 1).text())
+                w.edit_cells([(1, 1, '1')], advance=False)
+                self.assertEqual(w.saved.text(), w.large_saved.text())
+            except Exception as error:
+                errors.append(error)
+            finally:
+                w.large_dialog.accept()
+        QTimer.singleShot(50, inspect_dialog)
+        try:
+            w.open_large_input()
+            self.assertEqual([], errors)
+            self.assertIs(w.stack.currentWidget(), w.input)
+            self.assertIsNone(w.large_dialog)
+            self.assertEqual('1', table.item(1, 1).text())
+            self.assertEqual('vertical', w.direction.currentData())
+            self.assertEqual('up', w.vertical_direction.currentData())
+            self.assertTrue(all(s.isEnabled() for s in w.shortcuts))
+            self.assertTrue(w.large_button.isVisible())
+        finally:
+            w.close()
+
     def test_delete_clears_scores_atomically_preserves_names_maxima_and_can_undo(self):
         self.qt()
         self.fill()
@@ -480,6 +628,10 @@ class SimpleModeTests(unittest.TestCase):
             self.app.processEvents()
             self.assertLessEqual(workspace.width(), 980)
             self.assertLessEqual(workspace.minimumSizeHint().width(), 980)
+            for control in (workspace.direction, workspace.vertical_direction, workspace.begin_question,
+                            workspace.block_size, workspace.precision, workspace.undo_button):
+                self.assertGreater(workspace.progress.geometry().top(), control.geometry().bottom())
+            self.assertGreaterEqual(workspace.table.height(), 220)
             for button in workspace.input.findChildren(QPushButton):
                 if button.isVisible():
                     self.assertLessEqual(button.mapTo(workspace, button.rect().topRight()).x(), workspace.width())

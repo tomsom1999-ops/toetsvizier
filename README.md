@@ -29,6 +29,15 @@ Normering, analyse en Excel-export gebruiken alleen de zichtbare aantallen.
 
 Voer scores horizontaal per leerling, verticaal per vraag of gecombineerd in.
 Ctrl+V plakt vanuit Excel, Ctrl+C kopieert en Ctrl+Z herstelt een invoer of plakactie.
+Delete en Backspace wissen geselecteerde scores. N en meerkeuzeletters worden
+direct verwerkt. Hele punten springen per vraag automatisch door als het maximum
+hoogstens 9 is; bij een hoger maximum of decimalen bevestigt u met Enter of Tab.
+Verticaal en gecombineerd kunt u omhoog of omlaag beginnen; de route keert bij
+de volgende vraag of het volgende blok om. Bij gecombineerd kiest u een
+beginvraag en blokgrootte. De beginvraag schuift automatisch mee.
+Het grote invoerscherm gebruikt dezelfde tabel, instellingen en sneltoetsen.
+Een voortgangsteller toont ingevulde en ontbrekende scores; op kleine schermen
+blijven alle instellingen via scrollen bereikbaar.
 Standaard gebruikt u hele punten. **0** is een echte score; **N** betekent niet
 gemaakt en telt als nul; een lege cel moet nog worden ingevuld. Afwezige leerlingen
 neemt u niet op. De tabel heeft een kleurenlegenda.

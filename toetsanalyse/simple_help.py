@@ -25,7 +25,7 @@ TOPICS = [
      "Bij <b>hele punten</b> springt u automatisch verder als het maximum <b>voor die vraag hoogstens 9</b> is. "
      "Heeft de vraag een hoger maximum? Bevestig uw score met <b>Enter</b> of <b>Tab</b>. "
      "Bij decimalen bevestigt u met Enter of Tab.</p>"
-     "<p><b>Delete (Del)</b> wist de geselecteerde scores, ook tijdens het bewerken. "
+     "<p><b>Delete (Del) of Backspace</b> wist de geselecteerde scores, ook tijdens het bewerken. "
      "De cellen worden weer leeg, niet nul. Met <b>Ctrl+Z</b> herstelt u een vergissing.</p>"
      "<p><b>2</b> = twee punten. <b>0</b> = de vraag is gemaakt, maar levert geen punten op. "
      "<b>N</b> = niet gemaakt: nul punten, maar apart herkenbaar in de analyse. "
@@ -33,6 +33,7 @@ TOPICS = [
      "<p>Standaard gebruikt u <b>hele punten</b>. Kies Halve punten, Kwartpunten of Tiende punten als dat nodig is; "
      "voer dan bijvoorbeeld <b>1,5</b> in. U kunt nooit meer punten geven dan de maximumscore.</p>"
      "<p>Bij een ingestelde meerkeuzevraag voert u de <b>gekozen antwoordletter</b> in. "
+     "Na een antwoordletter of <b>N</b> springt u direct door, ook als u halve punten gebruikt. "
      "Goed meerkeuzeantwoord = groen; fout antwoord = lichtrood. Gewone punten blijven wit, ook bij nul. "
      "N is lichtoranje. De actieve leerling en vraag en een volledig ingevuld totaal zijn blauw.</p>"
      "<p>Is de invoer ongeldig? De cel krijgt een rode rand en bovenaan staat wat u moet corrigeren. "
@@ -49,12 +50,15 @@ TOPICS = [
      "wordt het blok niet gedeeltelijk opgeslagen: corrigeer het blok en plak opnieuw.</p>", "paste"),
     ("Horizontaal, verticaal of gecombineerd", "<p><b>Horizontaal (per leerling):</b> werk van links naar rechts door de vragen van één leerling. "
      "Na de laatste vraag gaat u naar de volgende leerling.</p>"
-     "<p><b>Verticaal (per vraag):</b> werk van boven naar beneden langs de leerlingen bij één vraag. "
-     "Daarna gaat u verder bij de volgende vraag.</p>"
-     "<p><b>Gecombineerd:</b> kies een blokgrootte, bijvoorbeeld twee vragen. "
+     "<p><b>Verticaal (per vraag):</b> kies Omlaag of Omhoog. Aan het einde van de leerlingen "
+     "gaat u in de volgende vraag in de andere richting verder: omlaag, omhoog, omlaag.</p>"
+     "<p><b>Gecombineerd:</b> kies een <b>Beginvraag</b> en een blokgrootte, bijvoorbeeld twee vragen. "
      "Voer vraag 1 en 2 in voor de eerste leerling, dan vraag 1 en 2 voor de volgende leerling. "
-     "Na alle leerlingen begint u aan het volgende blok.</p>"
-     "<p>De pijlen in het voorbeeld tonen de route. De instelling bepaalt waar Enter of Tab u naartoe brengt.</p>", "direction"),
+     "Na alle leerlingen schuift Beginvraag automatisch naar het volgende blok en keert de richting om.</p>"
+     "<p>De invoer blijft bij de scorecellen en stopt bij het einde van de toets. De pijlen in het voorbeeld tonen de route.</p>"
+     "<p><b>Groot invoerscherm</b> opent dezelfde tabel met alle invoerinstellingen in een ruim venster. "
+     "Keer terug met Terug naar hoofdscherm; uw gegevens en instellingen blijven behouden. "
+     "De voortgangsteller laat zien hoeveel scores ingevuld en nog open zijn.</p>", "direction"),
     ("Meerkeuze en vragen indelen", "<p>Deze extra's zijn <b>optioneel</b>. U hoeft ze niet te gebruiken om een analyse te maken.</p>"
      "<p><b>Meerkeuze instellen:</b> vink een vraag aan en kies de juiste antwoordletter, bijvoorbeeld B. "
      "Daarna typt u per leerling diens gekozen letter. Toetsvizier kent automatisch nul of de maximumscore toe. "
@@ -161,7 +165,7 @@ class InputDemo(QWidget):
 
     def arrows(self):
         if self.focus_area != "direction": return []
-        cells = ([(1, 1), (1, 3)] if self.variant == 0 else [(1, 1), (2, 1)] if self.variant == 1 else [(1, 1), (1, 2), (2, 1), (2, 2), (1, 3)])
+        cells = ([(1, 1), (1, 3)] if self.variant == 0 else [(1, 1), (2, 1), (2, 2), (1, 2)] if self.variant == 1 else [(1, 1), (1, 2), (2, 1), (2, 2), (2, 3), (1, 3)])
         points = [self.cell_rect(r, c).center() for r, c in cells]
         return list(zip(points, points[1:]))
 

@@ -10,13 +10,33 @@ from PySide6.QtGui import QColor, QKeySequence, QShortcut, QPen
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFileDialog,
     QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox,
     QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QStyledItemDelegate,
-    QAbstractItemDelegate)
+    QAbstractItemDelegate, QScrollArea)
 
 from .results import save_score, stored_results, test_questions
 from .simple_model import (SIMPLE_SUFFIX, add_student, completion, invalidate_grades,
                            recalculate_grades, save_as, set_counts, active_questions, active_students, project_active)
 from .simple_dialogs import InputIntroduction, MetadataDialog, MultipleChoiceDialog
 from .simple_widgets import WrappingLayout, question
+
+
+class InputScrollArea(QScrollArea):
+    """Keep the table and wrapped controls accessible on short screens."""
+    def __init__(self):
+        super().__init__()
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.viewport().installEventFilter(self)
+
+    def fit_content(self):
+        body = self.widget()
+        if body is not None and body.layout() is not None:
+            height = body.layout().totalHeightForWidth(self.viewport().width())
+            body.setMinimumHeight(max(0, height))
+
+    def eventFilter(self, watched, event):
+        if watched is self.viewport() and event.type() == QEvent.Type.Resize:
+            self.fit_content()
+        return super().eventFilter(watched, event)
 
 
 class ScoreEntryDelegate(QStyledItemDelegate):
@@ -49,25 +69,30 @@ class ScoreEntryDelegate(QStyledItemDelegate):
         if (not isValid(editor) or not editor.isVisible()
                 or not self.workspace.quick_score_complete(row, col, editor.text())):
             return
-        self.commitData.emit(editor)
-        if isValid(editor):
+        self.finish_entry(editor, row, col)
+
+    def finish_entry(self, editor, row, col):
+        self.workspace._confirming_editor = True
+        try:
+            self.commitData.emit(editor)
+        finally:
+            self.workspace._confirming_editor = False
+        try:
             self.closeEditor.emit(editor, QAbstractItemDelegate.EndEditHint.NoHint)
+        except RuntimeError:
+            pass  # Refreshing the table may already have closed this editor.
+        if (row, col) not in self.workspace.invalid:
+            self.workspace.advance(row, col)
 
     def eventFilter(self, editor, event):
-        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Delete:
+        if event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             row, col = self.workspace.table.currentRow(), self.workspace.table.currentColumn()
             if self.workspace.is_score_cell(row, col):
                 self.workspace.clear_scores([(row, col)])
                 return True
         if event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab):
             row, col = self.workspace.table.currentRow(), self.workspace.table.currentColumn()
-            self.commitData.emit(editor)
-            try:
-                self.closeEditor.emit(editor, QAbstractItemDelegate.EndEditHint.NoHint)
-            except RuntimeError:
-                pass  # Refreshing the table can already have closed the editor.
-            if (row, col) not in self.workspace.invalid:
-                self.workspace.advance(row, col)
+            self.finish_entry(editor, row, col)
             return True
         return super().eventFilter(editor, event)
 
@@ -84,6 +109,9 @@ class SimpleWorkspace(QWidget):
         self._released = False
         self.active_page = None
         self.projection = None
+        self.large_dialog = None
+        self.shortcuts = []
+        self._confirming_editor = False
         root = QVBoxLayout(self)
         top = WrappingLayout()
         top.addWidget(QLabel("Simpel · één losse toets"))
@@ -114,10 +142,12 @@ class SimpleWorkspace(QWidget):
         root.addWidget(self.status)
         self.stack = QStackedWidget()
         root.addWidget(self.stack, 1)
-        self.input = QWidget()
-        layout = QVBoxLayout(self.input)
+        self.input = InputScrollArea()
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        self.input.setWidget(body)
         hint = QLabel("Vul eerst maximumscores in. Typ leerlingnamen en scores, of kopieer cellen uit Excel en plak met Ctrl+V. "
-                      "0 = geen punten · N = niet gemaakt · leeg = nog invullen. Del wist geselecteerde scores. "
+                      "0 = geen punten · N = niet gemaakt · leeg = nog invullen. Del/Backspace wist geselecteerde scores. "
                       "Bij hele punten en maximaal 9 punten voor de vraag springt u automatisch verder. "
                       "Afwezige leerlingen neemt u niet op.")
         hint.setWordWrap(True)
@@ -149,14 +179,23 @@ class SimpleWorkspace(QWidget):
         self.direction.addItem("Verticaal (per vraag)", "vertical")
         self.direction.addItem("Gecombineerd", "hybrid")
         actions.addWidget(self.direction)
+        self.vertical_direction = QComboBox()
+        self.vertical_direction.addItem('Omlaag', 'down')
+        self.vertical_direction.addItem('Omhoog', 'up')
+        self.vertical_direction.setToolTip('Bij de volgende vraag of het volgende blok keert de richting automatisch om.')
+        actions.addWidget(self.vertical_direction)
+        self.begin_question = QComboBox()
+        self.begin_question.setToolTip('De eerste vraag van uw gecombineerde invoerblok. Schuift automatisch mee naar het volgende blok.')
+        actions.addWidget(self.begin_question)
         self.block_size = QSpinBox()
         self.block_size.setRange(1, 50)
         self.block_size.setValue(3)
         self.block_size.setPrefix("Gecombineerd: ")
         self.block_size.setSuffix(" vragen per blok")
         self.block_size.setVisible(False)
-        self.direction.currentIndexChanged.connect(lambda: self.block_size.setVisible(self.direction.currentData() == "hybrid"))
+        self.direction.currentIndexChanged.connect(self.update_direction_controls)
         actions.addWidget(self.block_size)
+        self.update_direction_controls()
         self.precision = QComboBox()
         self.precision.setToolTip("Hele punten: automatisch verder bij vragen met een maximum van hoogstens 9. "
                                  "Bij een hoger maximum bevestigt u met Enter of Tab. "
@@ -173,6 +212,7 @@ class SimpleWorkspace(QWidget):
             actions.addWidget(button)
         layout.addLayout(actions)
         self.table = QTableWidget()
+        self.table.setMinimumHeight(220)
         from .results_page import ActiveStudentHeader, ActiveQuestionHeader
         self.table.setVerticalHeader(ActiveStudentHeader(self.table))
         self.table.setHorizontalHeader(ActiveQuestionHeader(self.table))
@@ -182,6 +222,12 @@ class SimpleWorkspace(QWidget):
         self.table.cellChanged.connect(self.cell_changed)
         self.table.installEventFilter(self)
         self.table.setSelectionMode(QTableWidget.SelectionMode.ContiguousSelection)
+        self.progress = QLabel()
+        self.progress.setWordWrap(True)
+        layout.addWidget(self.progress)
+        self.large_button = QPushButton('Groot invoerscherm')
+        self.large_button.clicked.connect(self.open_large_input)
+        layout.addWidget(self.large_button)
         layout.addWidget(self.table, 1)
         self.legend = QLabel()
         self.legend.setWordWrap(True)
@@ -196,11 +242,68 @@ class SimpleWorkspace(QWidget):
             shortcut = QShortcut(QKeySequence(sequence), self)
             shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             shortcut.activated.connect(callback)
+            self.shortcuts.append(shortcut)
         self.refresh()
 
     @property
     def is_saved(self):
         return self.database.path.name != ":memory:"
+
+    def update_direction_controls(self):
+        direction = self.direction.currentData()
+        self.vertical_direction.setVisible(direction in ('vertical', 'hybrid'))
+        self.begin_question.setVisible(direction == 'hybrid')
+        self.block_size.setVisible(direction == 'hybrid')
+        QTimer.singleShot(0, self.input.fit_content)
+
+    def open_large_input(self):
+        if self.large_dialog is not None:
+            return
+        self.commit_input_editor()
+        current = (self.table.currentRow(), self.table.currentColumn())
+        dialog = QDialog(self)
+        dialog.setWindowTitle('Groot invoerscherm · ' + self.name.text())
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowMaximizeButtonHint)
+        screen = self.screen().availableGeometry()
+        dialog.resize(min(1400, screen.width() - 40), min(900, screen.height() - 40))
+        layout = QVBoxLayout(dialog)
+        self.stack.removeWidget(self.input)
+        layout.addWidget(self.input, 1)
+        self.input.show()
+        self.large_saved = QLabel(self.saved.text())
+        self.large_saved.setWordWrap(True)
+        layout.addWidget(self.large_saved)
+        buttons = QHBoxLayout()
+        save = QPushButton('Opslaan')
+        save.clicked.connect(lambda: self.save())
+        back = QPushButton('Terug naar hoofdscherm')
+        back.clicked.connect(dialog.accept)
+        buttons.addWidget(save)
+        buttons.addStretch()
+        buttons.addWidget(back)
+        layout.addLayout(buttons)
+        self.large_dialog = dialog
+        self.large_button.hide()
+        for shortcut in self.shortcuts:
+            shortcut.setEnabled(False)
+        for sequence, fn in (('Ctrl+V', self.paste), ('Ctrl+C', self.copy), ('Ctrl+Z', self.undo), ('Ctrl+S', self.save)):
+            shortcut = QShortcut(QKeySequence(sequence), dialog)
+            shortcut.activated.connect(fn)
+        try:
+            self.table.setCurrentCell(*current)
+            QTimer.singleShot(0, lambda: (dialog.activateWindow(), self.table.setFocus()))
+            dialog.exec()
+        finally:
+            self.commit_input_editor()
+            layout.removeWidget(self.input)
+            self.stack.insertWidget(0, self.input)
+            self.stack.setCurrentWidget(self.input)
+            self.large_dialog = None
+            self.large_button.show()
+            for shortcut in self.shortcuts:
+                shortcut.setEnabled(True)
+            self.table.setFocus()
+            dialog.deleteLater()
 
     def remember(self, snapshot):
         self.history.append(snapshot)
@@ -223,6 +326,13 @@ class SimpleWorkspace(QWidget):
         self.loading = True
         self.questions = active_questions(self.database)
         self.students = active_students(self.database)
+        begin = self.begin_question.currentData()
+        self.begin_question.blockSignals(True)
+        self.begin_question.clear()
+        for col, q in enumerate(self.questions, 1):
+            self.begin_question.addItem('Beginvraag: ' + q['label'], col)
+        self.begin_question.setCurrentIndex(max(0, self.begin_question.findData(begin)))
+        self.begin_question.blockSignals(False)
         self.question_count.setValue(len(self.questions))
         self.student_count.setValue(len(self.students))
         attempts, scores, responses = stored_results(self.database, 1)
@@ -310,6 +420,18 @@ class SimpleWorkspace(QWidget):
         from .norming import has_active_normalization
         state = completion(self.database)
         ready = state["ready"] and not self.invalid
+        expected = len(self.questions) * len(self.students)
+        entered = expected - len(state['missing'])
+        # Pending invalid edits are not complete entries, even if an older value is stored.
+        missing_cells = set(state['missing'])
+        for row, col in self.invalid:
+            if self.is_score_cell(row, col):
+                key = (self.students[row - 1]['id'], self.questions[col - 1]['id'])
+                if key not in missing_cells:
+                    entered -= 1
+        self.progress.setText(f'{len(self.students)} leerlingen · {len(self.questions)} vragen · '
+                              f'{max(0, entered)} van {expected} scores ingevuld · '
+                              f'{expected - max(0, entered)} nog open')
         finalized = has_active_normalization(self.database, 1)
         self.norm_button.setEnabled(ready)
         self.analysis_button.setEnabled(ready)
@@ -343,6 +465,8 @@ class SimpleWorkspace(QWidget):
             self.saved.setText("Alles opgeslagen · " + str(self.database.path))
         else:
             self.saved.setText("Nog geen bestand gekozen. Klik op Opslaan om uw analyse te bewaren.")
+        if self.large_dialog is not None:
+            self.large_saved.setText(self.saved.text())
 
     def apply_cell(self, row, col, raw):
         raw = str(raw).strip()
@@ -394,7 +518,7 @@ class SimpleWorkspace(QWidget):
         raw = self.table.item(row, col).text()
         if row > len(self.students) and not raw.strip():
             return
-        self.edit_cells([(row, col, raw)])
+        self.edit_cells([(row, col, raw)], advance=not self._confirming_editor)
 
     def edit_cells(self, entries, *, advance=True):
         before = self.snapshot()
@@ -423,9 +547,15 @@ class SimpleWorkspace(QWidget):
         return 1 <= row <= len(self.students) and 1 <= col <= len(self.questions)
 
     def quick_score_complete(self, row, col, text):
-        if not self.is_score_cell(row, col) or self.precision.currentData() != 1.0:
+        if not self.is_score_cell(row, col):
             return False
         q = self.questions[col - 1]
+        if text.upper() == 'N':
+            return True
+        if q['is_multiple_choice']:
+            return len(text) == 1 and text.isascii() and text.isalpha()
+        if self.precision.currentData() != 1.0:
+            return False
         if q['is_multiple_choice'] or not text.isascii() or not text.isdigit():
             return False
         value = int(text)
@@ -446,21 +576,35 @@ class SimpleWorkspace(QWidget):
         end = len(self.questions)
         if row == 0:
             target = (0, col + 1) if col < end else (1, 0)
-        elif direction == "vertical" and col > 0:
-            target = (row + 1, col) if row < len(self.students) else (1, min(end, col + 1))
-        elif direction == "hybrid" and col > 0:
+        elif not self.is_score_cell(row, col):
+            target = (row, 1)
+        elif direction in ('vertical', 'hybrid'):
+            up = self.vertical_direction.currentData() == 'up'
             block = self.block_size.value()
-            block_start = ((col - 1) // block) * block + 1
-            block_end = min(end, block_start + block - 1)
-            target = (row, col + 1) if col < block_end else ((row + 1, block_start) if row < len(self.students) else (1, block_end + 1) if block_end < end else (row + 1, 0))
+            begin = self.begin_question.currentData() or 1
+            block_start = max(1, begin + ((col - begin) // block) * block) if direction == 'hybrid' else col
+            block_end = min(end, block_start + block - 1) if direction == 'hybrid' else col
+            if col < block_end:
+                target = (row, col + 1)
+            elif (up and row > 1) or (not up and row < len(self.students)):
+                target = (row - 1 if up else row + 1, block_start)
+            elif block_end < end:
+                target = (row, block_end + 1)
+                self.vertical_direction.setCurrentIndex(self.vertical_direction.findData('down' if up else 'up'))
+                if direction == 'hybrid':
+                    self.begin_question.setCurrentIndex(self.begin_question.findData(block_end + 1))
+            else:
+                return
         else:
-            target = (row, col + 1) if col < end else (row + 1, 0)
-        self.table.setCurrentCell(min(target[0], self.table.rowCount() - 1), min(target[1], end))
+            target = (row, col + 1) if col < end else (row + 1, 1)
+        if 0 <= target[0] <= len(self.students) and 0 <= target[1] <= end:
+            self.table.setCurrentCell(*target)
+            self.table.setFocus()
 
     def eventFilter(self, watched, event):
         if watched is self.table and event.type() == QEvent.Type.KeyPress:
             if self.table.state() != QTableWidget.State.EditingState:
-                if event.key() == Qt.Key.Key_Delete:
+                if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
                     self.clear_scores()
                     return True
                 row, col = self.table.currentRow(), self.table.currentColumn()
@@ -468,7 +612,7 @@ class SimpleWorkspace(QWidget):
                         and self.quick_score_complete(row, col, event.text())):
                     self.edit_cells([(row, col, event.text())])
                     return True
-            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self.table.state() != QTableWidget.State.EditingState:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab) and self.table.state() != QTableWidget.State.EditingState:
                 self.advance(self.table.currentRow(), self.table.currentColumn())
                 return True
         return super().eventFilter(watched, event)
@@ -478,7 +622,7 @@ class SimpleWorkspace(QWidget):
         if isinstance(focus, QLineEdit) and not self.table.isAncestorOf(focus):
             focus.paste()
             return
-        if self.stack.currentWidget() is not self.input:
+        if self.large_dialog is None and self.stack.currentWidget() is not self.input:
             return
         rows = list(csv.reader(io.StringIO(QApplication.clipboard().text()), delimiter="\t"))
         if not rows:
@@ -511,7 +655,7 @@ class SimpleWorkspace(QWidget):
         QApplication.clipboard().setText(output.getvalue())
 
     def undo(self):
-        if self.stack.currentWidget() is not self.input:
+        if self.large_dialog is None and self.stack.currentWidget() is not self.input:
             return
         if self.invalid:
             self.invalid.clear()
