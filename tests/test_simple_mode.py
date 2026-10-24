@@ -398,7 +398,7 @@ class SimpleModeTests(unittest.TestCase):
             self.assertGreaterEqual(w.table.horizontalHeader().height(), 54)
             buttons = {b.text(): b for b in w.findChildren(QPushButton)}
             for text in ['Opslaan als', 'Exporteren naar Excel', 'Uitleg', 'Sluiten', 'Vragen indelen',
-                         'Meerkeuze instellen', 'Ongedaan maken (Ctrl+Z)', 'Groot invoerscherm']:
+                         'Meerkeuze instellen', 'Ongedaan maken', 'Groot invoerscherm']:
                 self.assertEqual('secondaryButton', buttons[text].objectName())
             self.assertEqual('primaryButton', buttons['Opslaan'].objectName())
             self.assertEqual('dangerButton', w.remove_button.objectName())
@@ -1003,12 +1003,13 @@ class SimpleModeTests(unittest.TestCase):
             self.assertLessEqual(workspace.width(), 980)
             self.assertLessEqual(workspace.minimumSizeHint().width(), 980)
             labels = {label.text() for label in workspace.input.findChildren(QLabel)}
-            self.assertIn('Toets- en invoerinstellingen', labels)
-            self.assertNotIn('Toets instellen', labels)
-            self.assertNotIn('Invoerroute en punten', labels)
+            self.assertIn('Toets instellen', labels)
+            self.assertIn('Invoerroute:', labels)
+            self.assertNotIn('Toets- en invoerinstellingen', labels)
             for control in (workspace.direction, workspace.vertical_direction, workspace.begin_question,
                             workspace.block_size, workspace.precision):
-                self.assertGreater(workspace.progress.geometry().top(), control.geometry().bottom())
+                self.assertGreater(workspace.table.geometry().top(), control.geometry().bottom())
+            self.assertGreater(workspace.table.geometry().top(), workspace.progress.geometry().bottom())
             self.assertGreaterEqual(workspace.table.height(), 260)
             for button in workspace.input.findChildren(QPushButton):
                 if button.isVisible():
