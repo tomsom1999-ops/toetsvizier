@@ -989,7 +989,7 @@ class SimpleModeTests(unittest.TestCase):
     def test_hybrid_toolbar_fits_small_window(self):
         self.qt()
         from PySide6.QtCore import QSettings
-        from PySide6.QtWidgets import QPushButton
+        from PySide6.QtWidgets import QLabel, QPushButton
         from toetsanalyse.app import STYLESHEET
         from toetsanalyse.simple_workspace import SimpleWorkspace
         previous_style = self.app.styleSheet()
@@ -1002,10 +1002,14 @@ class SimpleModeTests(unittest.TestCase):
             self.app.processEvents()
             self.assertLessEqual(workspace.width(), 980)
             self.assertLessEqual(workspace.minimumSizeHint().width(), 980)
+            labels = {label.text() for label in workspace.input.findChildren(QLabel)}
+            self.assertIn('Toets- en invoerinstellingen', labels)
+            self.assertNotIn('Toets instellen', labels)
+            self.assertNotIn('Invoerroute en punten', labels)
             for control in (workspace.direction, workspace.vertical_direction, workspace.begin_question,
                             workspace.block_size, workspace.precision):
                 self.assertGreater(workspace.progress.geometry().top(), control.geometry().bottom())
-            self.assertGreaterEqual(workspace.table.height(), 220)
+            self.assertGreaterEqual(workspace.table.height(), 260)
             for button in workspace.input.findChildren(QPushButton):
                 if button.isVisible():
                     self.assertLessEqual(button.mapTo(workspace, button.rect().topRight()).x(), workspace.width())

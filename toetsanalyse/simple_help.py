@@ -161,7 +161,7 @@ class InputDemo(QWidget):
             count_row.addWidget(counter)
         count_row.addWidget(QLabel("Lager aantal? Extra gegevens blijven bewaard."))
         count_row.addStretch()
-        layout.addWidget(QLabel('<b>Toets instellen</b>'))
+        layout.addWidget(QLabel('<b>Toets- en invoerinstellingen</b>'))
         layout.addWidget(self.counts)
         self.extras = QWidget()
         extras_row = QHBoxLayout(self.extras)
@@ -185,7 +185,6 @@ class InputDemo(QWidget):
         precision.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         route_row.addWidget(precision)
         route_row.addStretch()
-        layout.addWidget(QLabel('<b>Invoerroute en punten</b>'))
         layout.addWidget(self.routes)
 
         self.progress = QWidget()
