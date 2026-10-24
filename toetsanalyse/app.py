@@ -5063,7 +5063,7 @@ class SimpleMenuPage(QWidget):
         layout.addWidget(introduction)
         for title, explanation, signal in (
             ("CITO-analyseformulier uploaden", "Heeft u de CITO-analysetool in Excel ingevuld? Kies hier dat analyseformulier met de leerlingnamen, maximumscores en scores per vraag. Toetsvizier neemt deze gegevens over, zodat u niets opnieuw hoeft in te voeren. Daarna kunt u de gegevens controleren en aanpassen. Dit is het ingevulde analyseformulier, niet het bestand met de toetsvragen.", self.import_simple),
-            ("Zelf starten", "Vul het aantal vragen en leerlingen in. Na een korte uitleg begint u in de invoertabel. U kunt zelf typen of gegevens uit Excel plakken.", self.new_simple),
+            ("Zelf starten", "Kies eerst de naam en opslaglocatie van uw analysebestand. Vul daarna het aantal vragen en leerlingen in. Na een korte uitleg begint u in de invoertabel. Geldige wijzigingen worden automatisch opgeslagen. U kunt zelf typen of gegevens uit Excel plakken.", self.new_simple),
             ("Analyse openen", "Ga verder met een eerder opgeslagen simpele analyse (.tviz). De vragen, scores en instellingen staan er nog in.", self.open_simple),
         ):
             card = QFrame()
@@ -5264,11 +5264,23 @@ class MainWindow(QMainWindow):
         self.update_thread = None
 
     def create_simple(self) -> None:
+        target, _ = QFileDialog.getSaveFileName(self, 'Nieuwe analyse opslaan', 'Nieuwe analyse.tviz', 'Toetsvizier-analyse (*.tviz)')
+        if not target:
+            return
+        if not target.lower().endswith('.tviz'):
+            target += '.tviz'
         dialog = QDialog(self)
         dialog.setWindowTitle("Nieuwe simpele analyse")
         form = QFormLayout(dialog)
-        form.addRow(QLabel("Kies de aantallen. U kunt ze later boven de invoertabel aanpassen."))
-        name = QLineEdit("Nieuwe analyse")
+        note = QLabel('Kies de aantallen. Geldige wijzigingen worden daarna automatisch in dit bestand opgeslagen.')
+        note.setWordWrap(True)
+        form.addRow(note)
+        name = QLabel(Path(target).stem)
+        name.setWordWrap(True)
+        location = QLineEdit(target)
+        location.setReadOnly(True)
+        location.setToolTip(target)
+        location.setCursorPosition(len(target))
         questions = QSpinBox()
         questions.setRange(1,1000)
         questions.setValue(10)
@@ -5276,27 +5288,45 @@ class MainWindow(QMainWindow):
         students.setRange(1,10000)
         students.setValue(25)
         form.addRow("Naam",name)
+        form.addRow('Opslagbestand', location)
         form.addRow("Aantal vragen",questions)
         form.addRow("Aantal leerlingen",students)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Naar het invoerscherm")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Annuleren")
+        from .simple_widgets import dutch_buttons
+        dutch_buttons(buttons)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Opslaan en naar invoer")
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         form.addRow(buttons)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            from .simple_model import create_analysis
-            self.show_simple(create_analysis(questions.value(),name.text().strip() or "Nieuwe analyse",students.value()),explain=True)
+            from .simple_model import create_analysis, save_as
+            database = create_analysis(questions.value(), Path(target).stem, students.value())
+            try:
+                save_as(database, target)
+            except Exception as error:
+                database.close()
+                QMessageBox.warning(self, 'Analyse niet aangemaakt', str(error))
+                return
+            self.show_simple(database, explain=True)
 
     def import_cito_simple(self) -> None:
         path,_ = QFileDialog.getOpenFileName(self,"CITO-analyseformulier uploaden","","Excelbestand (*.xlsx *.xlsm)")
         if not path:
             return
+        target, _ = QFileDialog.getSaveFileName(self, 'CITO-analyse opslaan', Path(path).stem + '.tviz', 'Toetsvizier-analyse (*.tviz)')
+        if not target:
+            return
+        if not target.lower().endswith('.tviz'):
+            target += '.tviz'
+        database = None
         try:
-            from .simple_model import import_cito
+            from .simple_model import import_cito, save_as
             database = import_cito(path)
+            save_as(database, target)
         except Exception as error:
-            QMessageBox.warning(self,"CITO-bestand niet ingelezen",str(error))
+            if database is not None:
+                database.close()
+            QMessageBox.warning(self,"CITO-analyse niet aangemaakt",str(error))
             return
         self.show_simple(database,explain=True)
 
@@ -5318,6 +5348,8 @@ class MainWindow(QMainWindow):
             self.database.close()
         self.database = database
         workspace = SimpleWorkspace(database,self.settings)
+        workspace.title_changed.connect(self.set_simple_title)
+        self.set_simple_title(str(database.scalar('SELECT name FROM tests WHERE id=1')))
         workspace.back_to_start.connect(self.show_start)
         if self.stack.count()>1:
             old = self.stack.widget(1)
@@ -5327,6 +5359,9 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(workspace)
         if explain:
             QTimer.singleShot(0,workspace.show_intro)
+
+    def set_simple_title(self, title):
+        self.setWindowTitle(f'{title} · ToetsVizier {APP_VERSION} ({BRAND_COPYRIGHT})')
 
     def create_subject(self) -> None:
         dialog = NewSubjectDialog(self)
@@ -5393,6 +5428,7 @@ class MainWindow(QMainWindow):
         self.show_subject(database)
 
     def show_subject(self, database: SubjectDatabase) -> None:
+        self.setWindowTitle(f"ToetsVizier {APP_VERSION} ({BRAND_COPYRIGHT})")
         if self.database:
             self.database.close()
         self.database = database
@@ -5420,6 +5456,7 @@ class MainWindow(QMainWindow):
             self.database = None
         self.start.refresh()
         self.stack.setCurrentWidget(self.start)
+        self.setWindowTitle(f"ToetsVizier {APP_VERSION} ({BRAND_COPYRIGHT})")
 
     def closeEvent(self, event) -> None:
         current = self.stack.currentWidget()

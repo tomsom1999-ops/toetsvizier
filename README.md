@@ -13,7 +13,9 @@ worden niet met elkaar vermengd.
 
 Klik eerst op **Simpel openen**. Pas op het volgende scherm verschijnen
 **CITO-analyseformulier uploaden**, **Zelf starten** en **Analyse openen**, elk met uitleg.
-Een nieuwe analyse vraagt het aantal vragen en leerlingen. Daarna opent een
+Een nieuwe analyse vraagt eerst een naam en opslaglocatie voor het `.tviz`-bestand,
+en daarna het aantal vragen en leerlingen. De bestandsnaam wordt de titel.
+Het bestand is al opgeslagen wanneer het invoerscherm opent. Daarna opent een
 handleiding met zeven onderwerpen, gemarkeerde voorbeeldschermen en
 Vorige/Volgende. U kunt meteen een onderwerp kiezen, de uitleg overslaan met een
 knop of haar bij volgende analyses automatisch overslaan met het aparte vinkje.
@@ -51,8 +53,9 @@ Met **Meerkeuze instellen** kiest u per vraag een sleutel;
 daarna voert u antwoordletters in. Zonder sleutel gebruikt u punten. **Exporteren
 naar Excel** bewaart de zichtbare tabel en de vraaginstellingen/metadata.
 
-Na de eerste keer **Opslaan** worden geldige wijzigingen automatisch in het gekozen
-bestand bewaard. **Opslaan als** maakt een andere kopie. **Normeren** en **Analyseren**
+Vanaf het aanmaken worden geldige wijzigingen automatisch in het gekozen
+bestand bewaard. Dit geldt ook bij CITO-import. **Opslaan als** maakt een andere kopie
+en neemt de nieuwe bestandsnaam over als titel. **Normeren** en **Analyseren**
 worden beschikbaar als alle zichtbare maximumscores en scores geldig zijn ingevuld.
 Zonder vastgestelde normering is de analyseknop oranje en aanklikbaar: scores en
 vragen zijn te analyseren, cijfers en cijferafhankelijke onderdelen volgen na normering.

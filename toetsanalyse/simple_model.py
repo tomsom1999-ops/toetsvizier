@@ -35,7 +35,16 @@ def open_analysis(path: str | Path) -> SubjectDatabase:
         row = connection.execute("SELECT value FROM app_meta WHERE key='document_kind'").fetchone()
         if not row or row[0] != "simple_analysis":
             raise ValueError("Dit is geen opgeslagen simpele analyse. Open vakbestanden via Uitgebreid.")
-    return SubjectDatabase.open(path)
+    database = SubjectDatabase.open(path)
+    if str(database.scalar('SELECT name FROM tests WHERE id=1') or '').strip().casefold() == 'nieuwe analyse':
+        set_analysis_title(database, path.stem)
+    return database
+
+
+def set_analysis_title(database, title):
+    with database.connection:
+        database.connection.execute('UPDATE tests SET name=? WHERE id=1', (title,))
+        database.set_meta('subject_name', title)
 
 
 def save_as(database: SubjectDatabase, path: str | Path) -> None:
@@ -55,6 +64,7 @@ def save_as(database: SubjectDatabase, path: str | Path) -> None:
     database.connection.close()
     database.connection = connection
     database.path = path
+    set_analysis_title(database, path.stem)
 
 
 def add_student(database: SubjectDatabase, name: str) -> int:

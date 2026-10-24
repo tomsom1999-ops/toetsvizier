@@ -76,8 +76,9 @@ TOPICS = [
      "Met Eigen indeling toevoegen kiest u zelf een naam en de categorieën. "
      "Hoofdstuk, paragraaf, vraagstuk en leerdoel zijn alleen voorbeelden. "
      "U vindt deze verdelingen terug onder Groepsniveau: dat gaat over de deelnemers van uw toets.</p>", "extras"),
-    ("Opslaan, exporteren en verdergaan", "<p><b>Opslaan:</b> kies de eerste keer een naam en locatie voor uw <b>.tviz-analysebestand</b>. "
-     "Daarna worden geldige wijzigingen automatisch in dat bestand bewaard. Onderaan staat of alles opgeslagen is. "
+    ("Opslaan, exporteren en verdergaan", "<p><b>Automatisch opslaan:</b> bij het aanmaken kiest u eerst een naam en locatie voor uw <b>.tviz-analysebestand</b>. "
+     "De bestandsnaam wordt de titel van uw analyse. Geldige wijzigingen worden vanaf het begin automatisch in dat bestand bewaard. "
+     "Met Opslaan kunt u ook zelf de huidige invoer bevestigen. Onderaan staat of alles opgeslagen is. "
      "Invoer met een rode rand wordt niet bewaard: corrigeer die eerst.</p>"
      "<p><b>Opslaan als:</b> maak een andere kopie en werk daarin verder. "
      "<b>Exporteren naar Excel:</b> maak een Excelbestand met de zichtbare tabel en vraaginstellingen. "

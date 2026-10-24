@@ -100,6 +100,7 @@ class ScoreEntryDelegate(QStyledItemDelegate):
 
 class SimpleWorkspace(QWidget):
     back_to_start = Signal()
+    title_changed = Signal(str)
 
     def __init__(self, database, settings, parent=None):
         super().__init__(parent)
@@ -500,8 +501,12 @@ class SimpleWorkspace(QWidget):
             self.saved.setText("Alles opgeslagen · " + str(self.database.path))
         else:
             self.saved.setText("Nog geen bestand gekozen. Klik op Opslaan om uw analyse te bewaren.")
+        title = str(self.database.scalar('SELECT name FROM tests WHERE id=1'))
+        self.setWindowTitle(title)
+        self.title_changed.emit(title)
         if self.large_dialog is not None:
             self.large_saved.setText(self.saved.text())
+            self.large_dialog.setWindowTitle('Groot invoerscherm · ' + title)
 
     def apply_cell(self, row, col, raw):
         raw = str(raw).strip()
@@ -833,6 +838,7 @@ class SimpleWorkspace(QWidget):
                 path += SIMPLE_SUFFIX
             try:
                 save_as(self.database, path)
+                self.name.setText(str(self.database.scalar('SELECT name FROM tests WHERE id=1')))
             except Exception as error:
                 QMessageBox.warning(self, "Niet opgeslagen", str(error))
                 return False

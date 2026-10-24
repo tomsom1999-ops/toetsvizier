@@ -56,6 +56,153 @@ class SimpleModeTests(unittest.TestCase):
         finally:
             reopened.close()
 
+    def test_create_flow_chooses_file_first_and_opens_an_already_saved_analysis(self):
+        self.qt()
+        from PySide6.QtWidgets import QMainWindow, QDialog, QSpinBox
+        from toetsanalyse.app import MainWindow
+        from unittest.mock import Mock
+        host = QMainWindow()
+        host.show_simple = Mock()
+        path = Path(self.temp.name) / 'SE2 Trillingen.tviz'
+        order = []
+        def choose(*args, **kwargs):
+            order.append('bestand')
+            return str(path), ''
+        def counts(dialog):
+            order.append('aantallen')
+            self.assertEqual(['bestand', 'aantallen'], order)
+            counters = dialog.findChildren(QSpinBox)
+            counters[0].setValue(3)
+            counters[1].setValue(2)
+            return QDialog.DialogCode.Accepted
+        try:
+            with patch('toetsanalyse.app.QFileDialog.getSaveFileName', side_effect=choose), \
+                 patch('toetsanalyse.app.QDialog.exec', new=counts):
+                MainWindow.create_simple(host)
+            host.show_simple.assert_called_once()
+            created = host.show_simple.call_args.args[0]
+            try:
+                self.assertTrue(path.exists())
+                self.assertEqual(path, created.path)
+                self.assertEqual('SE2 Trillingen', created.scalar('SELECT name FROM tests WHERE id=1'))
+                reopened = open_analysis(path)
+                try:
+                    self.assertEqual(3, len(active_questions(reopened)))
+                    self.assertEqual(2, len(active_students(reopened)))
+                finally:
+                    reopened.close()
+            finally:
+                created.close()
+        finally:
+            host.close()
+
+    def test_cancelling_new_file_or_counts_does_not_create_a_document(self):
+        self.qt()
+        from PySide6.QtWidgets import QMainWindow, QDialog
+        from toetsanalyse.app import MainWindow
+        from unittest.mock import Mock
+        host = QMainWindow()
+        host.show_simple = Mock()
+        try:
+            with patch('toetsanalyse.app.QFileDialog.getSaveFileName', return_value=('', '')), \
+                 patch('toetsanalyse.app.QDialog.exec') as counts:
+                MainWindow.create_simple(host)
+                counts.assert_not_called()
+            path = Path(self.temp.name) / 'cancelled.tviz'
+            with patch('toetsanalyse.app.QFileDialog.getSaveFileName', return_value=(str(path), '')), \
+                 patch('toetsanalyse.app.QDialog.exec', return_value=QDialog.DialogCode.Rejected):
+                MainWindow.create_simple(host)
+            self.assertFalse(path.exists())
+            host.show_simple.assert_not_called()
+        finally:
+            host.close()
+
+    def test_cito_flow_chooses_destination_before_import_and_saves_before_opening(self):
+        self.qt()
+        from PySide6.QtWidgets import QMainWindow
+        from toetsanalyse.app import MainWindow
+        from unittest.mock import Mock
+        host = QMainWindow()
+        host.show_simple = Mock()
+        imported = create_analysis(3, 'Oorspronkelijke CITO-naam', 2)
+        path = Path(self.temp.name) / 'Mijn CITO-analyse.tviz'
+        try:
+            with patch('toetsanalyse.app.QFileDialog.getOpenFileName', return_value=('cito.xlsx', '')), \
+                 patch('toetsanalyse.app.QFileDialog.getSaveFileName', return_value=('', '')), \
+                 patch('toetsanalyse.simple_model.import_cito') as parser:
+                MainWindow.import_cito_simple(host)
+                parser.assert_not_called()
+                host.show_simple.assert_not_called()
+            with patch('toetsanalyse.app.QFileDialog.getOpenFileName', return_value=('cito.xlsx', '')), \
+                 patch('toetsanalyse.app.QFileDialog.getSaveFileName', return_value=(str(path), '')), \
+                 patch('toetsanalyse.simple_model.import_cito', return_value=imported):
+                MainWindow.import_cito_simple(host)
+            self.assertTrue(path.exists())
+            self.assertEqual('Mijn CITO-analyse', imported.scalar('SELECT name FROM tests WHERE id=1'))
+            self.assertIs(imported, host.show_simple.call_args.args[0])
+        finally:
+            imported.close()
+            host.close()
+
+    def test_opening_older_file_replaces_placeholder_title_with_filename(self):
+        path = Path(self.temp.name) / 'Bestaande toets.tviz'
+        save_as(self.db, path)
+        with self.db.connection:
+            self.db.connection.execute("UPDATE tests SET name='Nieuwe analyse' WHERE id=1")
+            self.db.set_meta('subject_name', 'Nieuwe analyse')
+        reopened = open_analysis(path)
+        try:
+            self.assertEqual('Bestaande toets', reopened.scalar('SELECT name FROM tests WHERE id=1'))
+            self.assertEqual('Bestaande toets', reopened.meta('subject_name'))
+        finally:
+            reopened.close()
+
+    def test_saved_filename_becomes_title_and_edits_are_written_without_save(self):
+        self.qt()
+        self.fill()
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QMainWindow
+        from toetsanalyse.app import MainWindow
+        from toetsanalyse.simple_workspace import SimpleWorkspace
+        original = Path(self.temp.name) / 'SE2 Trillingen.tviz'
+        save_as(self.db, original)
+        w = SimpleWorkspace(self.db, QSettings(str(Path(self.temp.name) / 'autosave.ini'), QSettings.Format.IniFormat))
+        host = QMainWindow()
+        w.title_changed.connect(lambda name: MainWindow.set_simple_title(host, name))
+        try:
+            self.assertEqual('SE2 Trillingen', w.name.text())
+            w.edit_cells([(1, 1, '1')])
+            reopened = open_analysis(original)
+            try:
+                sid = active_students(reopened)[0]['id']
+                qid = active_questions(reopened)[0]['id']
+                self.assertEqual(1, stored_results(reopened, 1)[1][sid, qid])
+                self.assertEqual('SE2 Trillingen', reopened.scalar('SELECT name FROM tests WHERE id=1'))
+            finally:
+                reopened.close()
+            target = Path(self.temp.name) / 'Nieuwe kopie.tviz'
+            with patch('toetsanalyse.simple_workspace.QFileDialog.getSaveFileName', return_value=(str(target), '')):
+                self.assertTrue(w.save(True))
+            self.assertEqual('Nieuwe kopie', w.name.text())
+            self.assertTrue(host.windowTitle().startswith('Nieuwe kopie · ToetsVizier'))
+            self.assertEqual('Nieuwe kopie', w.windowTitle())
+            w.name.setText('Mijn aangepaste titel')
+            w.name.editingFinished.emit()
+            w.save()
+            reopened = open_analysis(target)
+            try:
+                self.assertEqual('Mijn aangepaste titel', reopened.scalar('SELECT name FROM tests WHERE id=1'))
+            finally:
+                reopened.close()
+            reopened = open_analysis(original)
+            try:
+                self.assertEqual('SE2 Trillingen', reopened.scalar('SELECT name FROM tests WHERE id=1'))
+            finally:
+                reopened.close()
+        finally:
+            w.close()
+            host.close()
+
     def test_projection_only_analyses_active_data_and_persists_norm(self):
         self.fill()
         with self.db.connection:
