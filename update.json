@@ -1,21 +1,21 @@
 {
-  "latest_version": "1.1.1",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v1.1.1",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.1.1/ToetsVizier-1.1.1-windows-installer.exe",
-  "release_notes": "ToetsVizier 1.1.1 maakt de uitleg in de simpele modus gerichter en overzichtelijker.",
+  "latest_version": "1.1.2",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v1.1.2",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.1.2/ToetsVizier-1.1.2-windows-installer.exe",
+  "release_notes": "ToetsVizier 1.1.2 ondersteunt opnieuw beginnende vraagnummers per toetsversie.",
   "versions": [
     {
-      "version": "1.1.1",
+      "version": "1.1.2",
       "type": "patch",
-      "title": "Gerichtere uitleg",
+      "title": "Vraagnummers per toetsversie",
       "changes": [
-        "De kleurenlegenda verschijnt alleen op de uitlegpagina over invoerkleuren.",
-        "Meerkeuzevragen instellen heeft een eigen uitlegpagina met invoerregels en antwoordsleutel.",
-        "Vragen indelen heeft een eigen uitlegpagina voor standaard- en zelfgemaakte indelingen.",
-        "De instelvensters blijven compact; de uitgebreide toelichting staat centraal in de uitlegsectie."
+        "Elke toetsversie kan opnieuw bij vraag 1 beginnen.",
+        "Een dubbel vraagnummer wordt alleen binnen dezelfde versie geweigerd.",
+        "De vraagentabel toont het nummer samen met de versienaam, bijvoorbeeld Vraag 1 \u2013 TA.",
+        "Normering per versie en analyses per versie of gecombineerd blijven ongewijzigd werken."
       ]
     }
   ],
   "update_type": "installer",
-  "installer_sha256": "af79236a4ca5d1775eff6a6168837cbcddf1a430122dab11844ba889e460cf31"
+  "installer_sha256": "a29af2282ed3b7c2758233da2be798dc1c489adb7773b383d57792da06ef68ae"
 }
