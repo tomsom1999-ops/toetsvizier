@@ -1,21 +1,23 @@
 {
-  "latest_version": "1.1.4",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v1.1.4",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.1.4/ToetsVizier-1.1.4-windows-installer.exe",
-  "release_notes": "ToetsVizier 1.1.4 opent bij bewerken weer de werkelijk geselecteerde toetsversie.",
+  "latest_version": "1.2.0",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v1.2.0",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.2.0/ToetsVizier-1.2.0-windows-installer.exe",
+  "release_notes": "ToetsVizier 1.2.0 introduceert een apart updatevenster en verbetert rapportage en analyse van toetsversies.",
   "versions": [
     {
-      "version": "1.1.4",
-      "type": "patch",
-      "title": "Juiste toetsversie bij bewerken",
+      "version": "1.2.0",
+      "type": "minor",
+      "title": "Apart updatevenster en toetsversies vergelijken",
       "changes": [
-        "Vraag bewerken opent nu de versie die bij de geselecteerde zichtbare tabelregel hoort.",
-        "Een versiespecifieke vraag springt niet meer terug naar de eerste versie in de lijst.",
-        "De koppeling tussen zichtbare tabelregel, vraag-ID en toetsversie wordt automatisch getest."
+        "Apart updatevenster met bestandscontrole, back-up, herstel bij fouten en wachten op afsluiten.",
+        "Matrijsrapporten per toetsversie en een vergelijking tussen versies.",
+        "Gelijke vraagnummers uit verschillende versies blijven gescheiden in de analyse.",
+        "Gedeelde vragen krijgen een gezamenlijke P-waarde; Rit, Rir en betrouwbaarheid blijven per versie.",
+        "Grafiekbestanden worden meegeleverd in het updatepakket."
       ]
     }
   ],
-  "package_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.1.4/ToetsVizier-update-1.1.4.zip",
+  "package_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.2.0/ToetsVizier-update-1.2.0.zip",
   "update_type": "package",
-  "package_sha256": "6071EAE11D701B7F4EEF41308E69D31D1B931C462A6BF31D5E9CADB2D9507BD5"
+  "package_sha256": "AFB72D63BBD2B8F54310925843892AF276D4DF27D136CA9824F4D915FE2C639E"
 }
