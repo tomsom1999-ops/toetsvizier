@@ -198,6 +198,53 @@ class VersionQuestionNumbers(unittest.TestCase):
             [self.page.table.item(row, 0).text() for row in range(self.page.table.rowCount())],
         )
 
+    def test_edit_button_opens_question_from_selected_visible_row(self):
+        mapping = {}
+        question_ids = {}
+        for form in self.forms:
+            question_id = self.db.connection.execute(
+                "INSERT INTO matrix_questions(test_id,question_number,maximum_score) VALUES(?,?,?)",
+                (self.test_id, str(len(question_ids) + 1), 1),
+            ).lastrowid
+            question_ids[form["name"]] = question_id
+            mapping[form["id"], question_id] = ("1", None)
+        for visible_number in range(2, 11):
+            question_id = self.db.connection.execute(
+                "INSERT INTO matrix_questions(test_id,question_number,maximum_score) VALUES(?,?,?)",
+                (self.test_id, str(visible_number + 10), 1),
+            ).lastrowid
+            mapping[self.forms[0]["id"], question_id] = (str(visible_number), None)
+        save_question_mapping(self.db, self.test_id, mapping)
+        self.page.refresh_questions()
+        target_row = next(
+            row
+            for row in range(self.page.table.rowCount())
+            if self.page.table.item(row, 0).text() == "Vraag 1 – ML"
+        )
+        self.page.table.setCurrentCell(target_row, 0)
+        self.assertEqual(
+            question_ids["ML"],
+            self.page.table.item(target_row, 0).data(256),
+        )
+
+        opened = []
+        def cancel(dialog):
+            selected = [
+                form["name"]
+                for form in self.forms
+                if dialog.version_fields.entries[form["id"]][0].isChecked()
+            ]
+            opened.extend(selected)
+            return QDialog.DialogCode.Rejected
+
+        with (
+            patch.object(self.page, "taxonomies", return_value=[{"id": 1, "name": "Test", "values": []}]),
+            patch.object(self.page, "properties", return_value=[]),
+            patch.object(QuestionDialog, "exec", cancel),
+        ):
+            self.page.edit_question()
+        self.assertEqual(["ML"], opened)
+
 
 if __name__ == "__main__":
     unittest.main()

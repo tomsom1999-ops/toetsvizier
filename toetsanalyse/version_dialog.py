@@ -242,6 +242,10 @@ class NewQuestionVersionFields(QWidget):
         self.different.toggled.connect(self.update_mode)
         dialog.is_multiple_choice.toggled.connect(self.update_mode)
         if len(self._shared_selection) == 1:
+            selected_version_id = next(iter(self._shared_selection))
+            selected_index = self.specific_version.findData(selected_version_id)
+            if selected_index >= 0:
+                self.specific_version.setCurrentIndex(selected_index)
             self.kind.setCurrentIndex(self.kind.findData("specific"))
         self.update_mode()
         dialog.form.insertRow(0,"Toetsversies", self)
