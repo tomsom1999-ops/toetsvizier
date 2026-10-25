@@ -335,6 +335,7 @@ class InputIntroduction(QDialog):
         self.variant.blockSignals(False)
         self.demo.focus_area, self.demo.variant = area, 0
         self.demo.route_choice.setCurrentIndex(0)
+        self.demo.legend.setVisible(area == "colors")
         self.caption.setText("De oranje cel is de begincel voor uw plakactie." if area == "paste" else
                              "De groene pijlen laten zien waar Enter of Tab u naartoe brengt." if area == "direction" else
                              "De voorbeeldcellen en legenda gebruiken exact dezelfde kleuren als het invoerscherm." if area == "colors" else
