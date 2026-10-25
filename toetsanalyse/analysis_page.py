@@ -505,6 +505,16 @@ class AnalysisPage(Page):
             data = analysis_data(self.database, test_id, analysis_part_id=self.selected_analysis_part_id(), version_id=self.version.currentData())
             if QWebEngineView is not None and isinstance(self.dashboard, QWebEngineView):
                 asset_directory = Path(__file__).parent / "assets"
+                plotly_asset = asset_directory / "plotly-2.35.2.min.js"
+                if not plotly_asset.exists():
+                    configure_logging().error("Lokaal grafiekbestand ontbreekt bij toetsanalyse: %s", plotly_asset)
+                    self.dashboard.setHtml(
+                        "<style>body{font:14px 'Segoe UI';background:#f7f8fc;color:#344761;padding:40px}</style>"
+                        "<h2>Grafiekbestand ontbreekt</h2>"
+                        "<p>Het lokale grafiekbestand van ToetsVizier ontbreekt. Installeer een volledige versie "
+                        "of pas een herstelupdate toe. Uw ingevoerde gegevens zijn niet beschadigd.</p>"
+                    )
+                    return
                 dashboard_html = build_analysis_dashboard_html(data, "plotly-2.35.2.min.js")
                 if self.database.meta("document_kind", "") == "simple_analysis":
                     from .simple_presentation import simplify_dashboard
@@ -520,5 +530,6 @@ class AnalysisPage(Page):
                     "<p>Voor de interactieve analyses is PySide6 WebEngine nodig.</p>"
                 )
         except Exception as error:
+            configure_logging().exception("Toetsanalysedashboard kon niet worden geladen")
             self.dashboard.setHtml(f"<p>De toetsanalyse kon niet worden geladen: {html.escape(str(error))}</p>")
 

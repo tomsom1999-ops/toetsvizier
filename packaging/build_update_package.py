@@ -117,11 +117,15 @@ def build_update_package(
     root: Path = ROOT,
     include_roots: Sequence[str] = DEFAULT_INCLUDE_ROOTS,
     exclude_patterns: Sequence[str] = DEFAULT_EXCLUDES,
+    baseline_root: Path | None = None,
 ) -> tuple[Path, str]:
     version = version.strip()
     if not version:
         raise ValueError("Geef een versienummer op.")
     files = iter_package_files(root, include_roots, exclude_patterns)
+    if baseline_root is not None:
+        files = [file for file in files if not (baseline_root / file).is_file()
+                 or sha256_file(root / file) != sha256_file(baseline_root / file)]
     if not files:
         raise ValueError("Geen bestanden gevonden voor het updatepakket.")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -130,6 +134,11 @@ def build_update_package(
         "name": "ToetsVizier updatepakket",
         "version": version,
         "files": [file.as_posix() for file in files],
+        "sha256": {file.as_posix(): sha256_file(root / file) for file in files},
+        "baseline_sha256": {
+            file.as_posix(): sha256_file(baseline_root / file)
+            for file in iter_package_files(baseline_root, include_roots, exclude_patterns)
+        } if baseline_root is not None else {},
     }
     with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         archive.writestr("manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
@@ -141,6 +150,7 @@ def build_update_package(
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Bouw een licht ToetsVizier-updatepakket.")
     parser.add_argument("--version", required=True, help="Versie voor het pakket, bijvoorbeeld 0.3.1.")
+    parser.add_argument('--baseline-dir', type=Path, help='Vorige programmabuild; neem alleen nieuwe en gewijzigde bestanden op.')
     parser.add_argument("--output-dir", default="releases", help="Map waarin het ZIP-pakket wordt geschreven.")
     parser.add_argument(
         "--dist-dir",
@@ -162,6 +172,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         root=root,
         include_roots=include_roots,
         exclude_patterns=exclude_patterns,
+        baseline_root=args.baseline_dir,
     )
     print(f"Updatepakket geschreven: {package_path}")
     print(f"SHA-256: {digest}")

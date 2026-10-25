@@ -52,7 +52,7 @@ from .question_dialogs import (
     QuestionDialog,
 )
 from .report_documents import formatted_report_document
-from .reports import build_matrix_report_html
+from .reports import build_matrix_report_html, build_version_matrix_comparison_html
 from .results import normalize_multiple_choice_response, regrade_multiple_choice_question, score_limit_conflicts
 from .ui_helpers import (
     compact_action_button,
@@ -1722,12 +1722,53 @@ class MatrixPage(Page):
         if test_id is None:
             QMessageBox.information(self, "Geen toets", "Kies eerst een toets voor de toetsmatrijs.")
             return
+        report_database = self.database
+        report_name = self.test.currentText()
+        projected_database = None
+        from .test_versions import project_version, versions
+        test_versions = versions(self.database, test_id)
+        if test_versions:
+            version_names = [str(version["name"]) for version in test_versions]
+            choices = version_names + (["Versies vergelijken"] if len(version_names) > 1 else [])
+            selected_name, accepted = QInputDialog.getItem(
+                self,
+                "Toetsversie voor matrijsrapport",
+                "Kies de toetsversie waarvoor u het matrijsrapport wilt maken:",
+                choices,
+                0,
+                False,
+            )
+            if not accepted:
+                return
+            if selected_name == "Versies vergelijken":
+                try:
+                    html = build_version_matrix_comparison_html(self.database, test_id)
+                except Exception as error:
+                    QMessageBox.warning(self, "Rapport niet gemaakt", str(error))
+                    return
+                MatrixReportPreviewDialog(
+                    self.database,
+                    test_id,
+                    f"{report_name} — versievergelijking",
+                    html,
+                    self,
+                ).exec()
+                return
+            selected_version = next(
+                version for version in test_versions if str(version["name"]) == str(selected_name)
+            )
+            projected_database = project_version(self.database, test_id, int(selected_version["id"]))
+            report_database = projected_database
+            report_name = f"{report_name} — {selected_version['name']}"
         try:
-            html = build_matrix_report_html(self.database, test_id)
+            html = build_matrix_report_html(report_database, test_id)
         except Exception as error:
             QMessageBox.warning(self, "Rapport niet gemaakt", str(error))
             return
-        MatrixReportPreviewDialog(self.database, test_id, self.test.currentText(), html, self).exec()
+        finally:
+            if projected_database is not None:
+                projected_database.close()
+        MatrixReportPreviewDialog(self.database, test_id, report_name, html, self).exec()
 
 
 

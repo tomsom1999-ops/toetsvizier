@@ -257,6 +257,7 @@ select {{ font:inherit; width:100%; border:1px solid var(--border); background:#
   </nav>
   <section id="general" class="view active">
     <div id="generalKpis" class="kpis"></div>
+    <article id="versionComparisonCard" class="card" style="display:none;"></article>
     <article id="subtestInsight" class="card subtest-insight"></article>
     <div class="general-grid">
       <div>
@@ -633,6 +634,16 @@ function renderGeneral() {{
     cards.splice(3, 0, {{label:"Gemiddeld cijfer", value:number(summary.mean_grade), note:summary.sd_grade === null ? "" : "(spreiding " + number(summary.sd_grade) + ")"}});
   }}
   renderKpis("generalKpis", cards);
+  const comparisonCard = document.getElementById("versionComparisonCard");
+  const comparisons = data.version_comparison || [];
+  if (comparisons.length) {{
+    comparisonCard.style.display = "block";
+    comparisonCard.innerHTML = `<h2 class="section-title">Versies vergelijken</h2>
+      <div class="explanation">Vergelijkbare totaalcijfers staan per versie naast elkaar. Vraagnummers worden hier niet als dezelfde vraag behandeld.</div>
+      <div class="table-wrap"><table><thead><tr><th>Versie</th><th>Leerlingen</th><th>Maximumscore</th><th>Gemiddeld %</th><th>Gemiddeld cijfer</th><th>Voldoende</th></tr></thead><tbody>${{comparisons.map(version => `<tr><td><strong>${{esc(version.name)}}</strong></td><td>${{version.participant_count}}</td><td>${{number(version.maximum_score)}}</td><td>${{percentage(version.mean_percentage)}}</td><td>${{version.mean_grade === null ? "-" : number(version.mean_grade)}}</td><td>${{percentage(version.sufficient_percentage)}}</td></tr>`).join("")}}</tbody></table></div>`;
+  }} else {{
+    comparisonCard.style.display = "none";
+  }}
   renderSubtestInsight();
   const names = [
     {{key:"alpha", label:"Cronbach's alpha"}},
@@ -649,7 +660,9 @@ function renderGeneral() {{
     }}
     return `<div class="quality"><div class="quality-name">${{item.label}}</div><div class="quality-value">${{value}}</div>${{badge(metric.status)}}<div class="quality-range">Bereik: ${{esc(metric.status.range)}}</div><div class="quality-advice">${{esc(metric.status.advice)}}</div></div>`;
   }}).join("");
-  document.getElementById("itemRows").innerHTML = itemAnalysisRows();
+  const itemRowsTarget = document.getElementById("itemRows");
+  const renderedItemRows = itemAnalysisRows();
+  itemRowsTarget.innerHTML = renderedItemRows || `<tr><td colspan="5"><div class="empty">${{esc(data.item_analysis_note || "Er zijn geen vragen om te analyseren.")}}</div></td></tr>`;
   renderMultipleChoiceAnalysis();
   const alpha = data.quality.alpha;
   const sem = data.quality.sem;

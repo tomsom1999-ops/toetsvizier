@@ -93,8 +93,28 @@ class TestVersions(unittest.TestCase):
         items = {i['id']:i for i in combined['item_analysis']}
         self.assertEqual(3,items[self.shared]['participant_count'])
         self.assertAlmostEqual(2/3,items[self.shared]['p_value'])
-        self.assertEqual(1,items[self.specific]['participant_count'])
-        self.assertEqual(.75,items[self.specific]['p_value'])
+        self.assertIsNone(items[self.shared]['rit'])
+        self.assertIsNone(items[self.shared]['rir'])
+        self.assertNotIn(self.specific,items)
+        self.assertEqual('version_comparison',combined['analysis_mode'])
+        self.assertEqual(['A','B','C'],[item['name'] for item in combined['version_comparison']])
+        self.assertIn('Gelijke vraagnummers',combined['item_analysis_note'])
+
+    def test_equal_visible_numbers_in_different_versions_are_not_combined(self):
+        mapping = dict(self.mapping)
+        mapping[self.a, self.shared] = ('1', None)
+        mapping.pop((self.b, self.shared))
+        mapping.pop((self.c, self.shared))
+        save_question_mapping(self.db, self.test_id, mapping)
+
+        combined = analysis_data(self.db, self.test_id)
+        self.assertNotIn(self.shared, {item['id'] for item in combined['item_analysis']})
+        self.assertNotIn(self.specific, {item['id'] for item in combined['item_analysis']})
+
+        version_a = analysis_data(self.db, self.test_id, version_id=self.a)
+        version_b = analysis_data(self.db, self.test_id, version_id=self.b)
+        self.assertEqual(['1'], [item['label'] for item in version_a['item_analysis']])
+        self.assertEqual(['1'], [item['label'] for item in version_b['item_analysis']])
 
     def test_question_can_be_shared_by_only_two_forms(self):
         self.mapping.pop((self.c,self.shared))

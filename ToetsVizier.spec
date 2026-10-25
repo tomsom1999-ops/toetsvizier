@@ -55,8 +55,21 @@ exe = EXE(
     entitlements_file=None,
     icon=str(app_icon),
 )
+updater_analysis = Analysis(
+    ['packaging/standalone_updater.py'], pathex=[], binaries=[], datas=[],
+    hiddenimports=[], hookspath=[], hooksconfig={}, runtime_hooks=[],
+    excludes=[], noarchive=False, optimize=0,
+)
+updater_pyz = PYZ(updater_analysis.pure)
+updater_exe = EXE(
+    updater_pyz, updater_analysis.scripts, updater_analysis.binaries,
+    updater_analysis.datas, [], name='ToetsVizier-updater',
+    console=False, debug=False, strip=False, upx=True,
+    icon=str(app_icon),
+)
 coll = COLLECT(
     exe,
+    [('ToetsVizier-updater.exe', updater_exe.name, 'EXECUTABLE')],
     a.binaries,
     a.datas,
     strip=False,

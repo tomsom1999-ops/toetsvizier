@@ -20,6 +20,23 @@ class SelfUpdateError(RuntimeError):
     pass
 
 
+def launch_update_window(package_path: Path | str) -> None:
+    """Start the independent updater before requesting normal app closure."""
+    helper = APP_ROOT / 'ToetsVizier-updater.exe'
+    if not helper.is_file():
+        raise SelfUpdateError('Het aparte updatevenster ontbreekt. Installeer eerst een versie met het nieuwe updatesysteem.')
+    try:
+        # Run outside the installation so the patch can replace the helper too.
+        stage = Path(tempfile.mkdtemp(prefix='ToetsVizier-updatevenster-'))
+        staged_helper = stage / helper.name
+        shutil.copy2(helper, staged_helper)
+        subprocess.Popen([str(staged_helper), '--package', str(Path(package_path).resolve()),
+                          '--root', str(APP_ROOT.resolve()), '--wait-pid', str(os.getpid())],
+                         close_fds=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    except OSError as error:
+        raise SelfUpdateError(f'Het updatevenster kon niet worden geopend: {error}') from error
+
+
 PROTECTED_UPDATE_PARTS = {
     "data",
     "backups",

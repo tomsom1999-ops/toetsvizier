@@ -6,10 +6,11 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QInputDialog, QMessageBox
 
 from toetsanalyse.database import SubjectDatabase
 from toetsanalyse.matrix_page import MatrixPage
+from toetsanalyse.matrix_page import MatrixReportPreviewDialog
 from toetsanalyse.question_dialogs import QuestionDialog
 from toetsanalyse.test_versions import create_versions, mapped_questions, save_question_mapping, versions
 from toetsanalyse.version_dialog import NewQuestionVersionFields
@@ -244,6 +245,56 @@ class VersionQuestionNumbers(unittest.TestCase):
         ):
             self.page.edit_question()
         self.assertEqual(["ML"], opened)
+
+    def test_matrix_report_is_generated_for_selected_version_only(self):
+        mapping = {}
+        for index, form in enumerate(self.forms, start=1):
+            question_id = self.db.connection.execute(
+                "INSERT INTO matrix_questions(test_id,question_number,maximum_score,short_description) VALUES(?,?,?,?)",
+                (self.test_id, str(index), index, form["name"]),
+            ).lastrowid
+            mapping[form["id"], question_id] = ("1", None)
+        save_question_mapping(self.db, self.test_id, mapping)
+        self.page.refresh_questions()
+        previews = []
+
+        def preview(_dialog):
+            previews.append(_dialog)
+            return QDialog.DialogCode.Rejected
+
+        with (
+            patch.object(QInputDialog, "getItem", return_value=("ML", True)),
+            patch.object(MatrixReportPreviewDialog, "exec", preview),
+        ):
+            self.page.generate_report()
+
+        self.assertEqual(1, len(previews))
+        self.assertTrue(previews[0].test_name.endswith("— ML"))
+        self.assertIn("ML", previews[0].html)
+        self.assertNotIn("Technische Automatisering", previews[0].html)
+        self.assertNotIn("Optica", previews[0].html)
+
+    def test_matrix_report_can_compare_all_versions(self):
+        mapping = {}
+        for index, form in enumerate(self.forms, start=1):
+            question_id = self.db.connection.execute(
+                "INSERT INTO matrix_questions(test_id,question_number,maximum_score,short_description) VALUES(?,?,?,?)",
+                (self.test_id, str(index), index, form["name"]),
+            ).lastrowid
+            mapping[form["id"], question_id] = ("1", None)
+        save_question_mapping(self.db, self.test_id, mapping)
+        self.page.refresh_questions()
+        previews = []
+        with (
+            patch.object(QInputDialog, "getItem", return_value=("Versies vergelijken", True)),
+            patch.object(MatrixReportPreviewDialog, "exec", lambda dialog: previews.append(dialog)),
+        ):
+            self.page.generate_report()
+        self.assertEqual(1, len(previews))
+        self.assertIn("Vergelijking toetsmatrijzen", previews[0].html)
+        for form in self.forms:
+            self.assertIn(form["name"], previews[0].html)
+        self.assertIn("Maximumscore", previews[0].html)
 
 
 if __name__ == "__main__":

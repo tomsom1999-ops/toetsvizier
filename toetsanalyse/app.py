@@ -206,6 +206,7 @@ from .self_update import (
     download_update_package,
     launch_staged_update,
     launch_installer,
+    launch_update_window,
     stage_update_package_for_external_apply,
     stage_update_package_for_restart,
     validate_update_package,
@@ -583,29 +584,22 @@ class UpdateAvailableDialog(QDialog):
             "ToetsVizier controleert het pakket en zet een veilige update klaar. "
             "Uw vakdatabases, back-ups, exports en instellingen worden niet overschreven.\n\n"
             "Daarna sluit ToetsVizier af en wordt de update buiten de app toegepast. "
-            "Het programma start daarna opnieuw.\n\n"
+            "Na afloop kunt u het programma vanuit het updatevenster opnieuw starten.\n\n"
             "Nu doorgaan?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
-        self.progress.setVisible(True)
-        self.progress.setRange(0, 0)
-        self.status_label.setText(
-            "Het updatepakket wordt gecontroleerd. ToetsVizier sluit zo af; "
-            "het uitpakken gebeurt daarna buiten de app."
-        )
-        self.download_button.setEnabled(False)
-        self.release_page_button.setEnabled(False)
-        self.later_button.setEnabled(False)
-        thread = UpdateApplyThread(self.downloaded_package, self)
-        self.apply_thread = thread
-        thread.result_ready.connect(self.apply_finished)
-        thread.error_ready.connect(self.apply_failed)
-        thread.finished.connect(self.finish_apply)
-        thread.finished.connect(thread.deleteLater)
-        thread.start()
+        try:
+            launch_update_window(self.downloaded_package)
+        except SelfUpdateError as error:
+            QMessageBox.warning(self, 'Updatevenster openen mislukt', str(error))
+            return
+        self.accept()
+        for window in QApplication.topLevelWidgets():
+            if isinstance(window, MainWindow):
+                window.close()
 
     def apply_finished(self, backup_dir: str, applied_now: bool) -> None:
         self.progress.setRange(0, 1)
@@ -4843,6 +4837,16 @@ class NormingPage(Page):
             data["is_finalized"] = has_active_normalization(scoped_database, test_id)
             settings = load_normalization(scoped_database, test_id)
             asset_directory = Path(__file__).parent / "assets"
+            plotly_asset = asset_directory / "plotly-2.35.2.min.js"
+            if not plotly_asset.exists():
+                configure_logging().error("Lokaal grafiekbestand ontbreekt bij normering: %s", plotly_asset)
+                self.dashboard.setHtml(
+                    "<style>body{font:14px 'Segoe UI';background:#f7f8fc;color:#344761;padding:40px}</style>"
+                    "<h2>Grafiekbestand ontbreekt</h2>"
+                    "<p>Het lokale grafiekbestand van ToetsVizier ontbreekt. Installeer een volledige versie "
+                    "of pas een herstelupdate toe. Uw ingevoerde gegevens zijn niet beschadigd.</p>"
+                )
+                return
             html_content = build_norming_dashboard_html(data, settings, "plotly-2.35.2.min.js")
             if self.database.meta("document_kind", "") == "simple_analysis":
                 from .simple_presentation import simplify_dashboard
@@ -4853,6 +4857,7 @@ class NormingPage(Page):
             )
             self.set_dashboard_zoom(self.dashboard_zoom)
         except Exception as error:
+            configure_logging().exception("Normeringsdashboard kon niet worden geladen")
             self.dashboard.setHtml(f"<p>Het normeringsdashboard kon niet worden geladen: {html.escape(str(error))}</p>")
 
 

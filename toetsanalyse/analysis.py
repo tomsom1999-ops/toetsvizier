@@ -41,10 +41,30 @@ def combined_version_analysis(database, test_id, analysis_part_id=None):
     result["sample"]["message"] = (
         f"{len(participants)} complete resultaten over {len(forms)} versies. "
         "Totaalscores worden als percentage van de eigen versie weergegeven. "
-        "Bij elke vraag staat het aantal leerlingen met een ingevoerde score. "
-        "Betrouwbaarheid en meetfout bekijkt u per versie. "
-        "Rit/Rir gebruiken percentages van de eigen toetsversie."
+        "Vraagstatistieken worden alleen gecombineerd voor expliciet gedeelde vragen. "
+        "Versiespecifieke vragen, ook met hetzelfde nummer, vergelijkt u uitsluitend binnen hun eigen versie. "
+        "Betrouwbaarheid en meetfout bekijkt u per versie."
     )
+    result["analysis_mode"] = "version_comparison"
+    result["item_analysis_note"] = (
+        "Hier staan alleen expliciet gedeelde vragen. Gelijke vraagnummers betekenen niet automatisch "
+        "dat vragen inhoudelijk gelijk zijn. De gezamenlijke P-waarde gebruikt alle afnames van de gedeelde "
+        "vraag; Rit en Rir worden niet over verschillende toetsversies samengevoegd. Kies bovenaan één "
+        "versie voor de volledige itemanalyse."
+    )
+    result["version_comparison"] = [
+        {
+            "name": str(form["name"]),
+            "participant_count": int(data["participant_count"]),
+            "maximum_score": float(data["maximum_score"]),
+            "mean_percentage": data["summary"].get("mean_score") / data["maximum_score"] * 100
+            if data["summary"].get("mean_score") is not None and data["maximum_score"]
+            else None,
+            "mean_grade": data["summary"].get("mean_grade"),
+            "sufficient_percentage": data["summary"].get("sufficient_percentage"),
+        }
+        for form, data in datasets
+    ]
     totals = [p["total_score"] for p in participants]
     grades = [p["grade"] for p in participants if p["grade"] is not None]
     mode, count = _mode(totals)
@@ -57,7 +77,22 @@ def combined_version_analysis(database, test_id, analysis_part_id=None):
         "sufficient_percentage": sum(g >= 5.5 for g in grades) / len(grades) * 100 if grades else None,
     })
     originals = {int(q["id"]): dict(q) for q in database.rows("SELECT * FROM matrix_questions WHERE test_id=?", (test_id,))}
-    templates = {item["id"]: item for _, data in datasets for item in data["item_analysis"]}
+    membership_counts = {
+        int(row["question_id"]): int(row["version_count"])
+        for row in database.rows(
+            "SELECT vq.question_id, COUNT(DISTINCT vq.version_id) AS version_count "
+            "FROM version_questions vq JOIN test_versions v ON v.id=vq.version_id "
+            "WHERE v.test_id=? GROUP BY vq.question_id",
+            (test_id,),
+        )
+    }
+    shared_question_ids = {question_id for question_id, count in membership_counts.items() if count > 1}
+    templates = {
+        item["id"]: item
+        for _, data in datasets
+        for item in data["item_analysis"]
+        if int(item["id"]) in shared_question_ids
+    }
     items = []
     for question_id, template in templates.items():
         item = copy.deepcopy(template)
@@ -70,19 +105,11 @@ def combined_version_analysis(database, test_id, analysis_part_id=None):
             "WHERE a.test_id=? AND s.question_id=? AND a.status='gemaakt' AND s.score IS NOT NULL",
             (test_id, question_id))
         values = [float(row["score"]) for row in rows]
-        pairs = []
-        for _, data in datasets:
-            form_maximum = data["maximum_score"]
-            for participant in data["participants"]:
-                if question_id in participant["scores"]:
-                    value = participant["scores"][question_id]
-                    rest_maximum = form_maximum - maximum
-                    pairs.append((value, participant["score_percentage"],
-                                  (participant["total_score"] - value) / rest_maximum * 100 if rest_maximum > 0 else None))
         p_value = _average(values) / maximum if values and maximum else None
-        rit = _pearson([p[0] for p in pairs], [p[1] for p in pairs])
-        rest = [p for p in pairs if p[2] is not None]
-        rir = _pearson([p[0] for p in rest], [p[2] for p in rest])
+        # Rit and Rir relate an item to the surrounding test. That surrounding test
+        # differs per form, so a pooled correlation would not have one clear meaning.
+        rit = None
+        rir = None
         labels = [f"{form['name']}: {row['label']}" for form in forms for row in database.rows(
             "SELECT label FROM version_questions WHERE version_id=? AND question_id=?", (form["id"], question_id))]
         item.update({"label": question["question_number"] + (question["subquestion"] or ""), "version_labels":labels,

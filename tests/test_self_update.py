@@ -1,6 +1,7 @@
 import unittest
 import tempfile
 import zipfile
+from unittest.mock import patch
 from pathlib import Path
 
 from toetsanalyse.self_update import (
@@ -12,10 +13,24 @@ from toetsanalyse.self_update import (
     stage_update_package_for_restart,
     update_package_extension_from_url,
     validate_update_package,
+    launch_update_window,
 )
 
 
 class SelfUpdateTests(unittest.TestCase):
+    def test_update_window_runs_outside_installation_and_waits_for_app(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'ToetsVizier-updater.exe').write_bytes(b'helper')
+            with patch('toetsanalyse.self_update.APP_ROOT', root), patch('toetsanalyse.self_update.subprocess.Popen') as launch:
+                launch_update_window(root / 'patch.zip')
+            command = launch.call_args.args[0]
+            self.assertNotEqual(root, Path(command[0]).parent)
+            self.assertIn('--wait-pid', command)
+            self.assertEqual(str(root.resolve()), command[command.index('--root') + 1])
+            import shutil
+            shutil.rmtree(Path(command[0]).parent)
+
     def test_installer_extension_from_url_accepts_query_string(self) -> None:
         self.assertEqual(".exe", installer_extension_from_url("https://example.test/update.exe?token=abc"))
         self.assertEqual(".msi", installer_extension_from_url("https://example.test/update.msi"))

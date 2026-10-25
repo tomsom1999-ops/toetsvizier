@@ -672,7 +672,7 @@ def fill_version_combo(combo, database, test_id, *, combined=False):
     combo.blockSignals(True)
     combo.clear()
     if combined:
-        combo.addItem("Alle versies samen", None)
+        combo.addItem("Versies vergelijken — totaalscores en gedeelde vragen", None)
     for form in forms:
         combo.addItem(form["name"], form["id"])
     index = combo.findData(previous)

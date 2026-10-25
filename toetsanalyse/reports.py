@@ -196,6 +196,84 @@ def matrix_report_data(database: SubjectDatabase, test_id: int) -> dict[str, Any
     }
 
 
+def build_version_matrix_comparison_html(database: SubjectDatabase, test_id: int) -> str:
+    """Build one side-by-side matrix summary for every configured test version."""
+    from .test_versions import project_version, versions
+
+    version_rows = versions(database, test_id)
+    if len(version_rows) < 2:
+        raise ValueError("Maak minimaal twee toetsversies om ze te kunnen vergelijken.")
+    reports: list[tuple[str, dict[str, Any]]] = []
+    for version in version_rows:
+        projected = project_version(database, test_id, int(version["id"]))
+        try:
+            reports.append((str(version["name"]), matrix_report_data(projected, test_id)))
+        finally:
+            projected.close()
+
+    test = reports[0][1]["test"]
+    subject = reports[0][1]["subject"]
+    headers = "".join(f"<th>{escape(name)}</th>" for name, _data in reports)
+
+    def row(label: str, values: list[str]) -> str:
+        return f"<tr><th>{escape(label)}</th>{''.join(f'<td>{value}</td>' for value in values)}</tr>"
+
+    summary_rows = [
+        row("Aantal vragen", [str(len(data["questions"])) for _name, data in reports]),
+        row("Maximumscore", [_number(float(data["total_points"])) for _name, data in reports]),
+        row("Verwachte tijd", [_duration(data) for _name, data in reports]),
+        row(
+            "Ingevulde classificaties",
+            [
+                "Niet van toepassing" if data["coverage"] is None else f"{float(data['coverage']):.0f}%"
+                for _name, data in reports
+            ],
+        ),
+        row(
+            "Vraagnummers",
+            [", ".join(escape(str(question["label"])) for question in data["questions"]) or "-" for _name, data in reports],
+        ),
+    ]
+    distribution_titles = []
+    for _name, data in reports:
+        for distribution in data["distributions"]:
+            if distribution["title"] not in distribution_titles:
+                distribution_titles.append(distribution["title"])
+    distribution_rows = []
+    for title in distribution_titles:
+        values = []
+        for _name, data in reports:
+            distribution = next((item for item in data["distributions"] if item["title"] == title), None)
+            entries = distribution["entries"] if distribution else []
+            values.append(
+                "<br>".join(
+                    f"<strong>{escape(str(entry['name']))}</strong>: {_number(float(entry['points']))} p "
+                    f"({float(entry['percentage']):.0f}%)"
+                    for entry in entries
+                ) or "-"
+            )
+        distribution_rows.append(row(str(title), values))
+
+    return f"""<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><style>
+body {{ font-family: Segoe UI, Arial, sans-serif; color:#172538; margin:28px; background:#f4f7fb; }}
+h1 {{ color:#082653; margin-bottom:4px; }}
+.meta {{ color:#526884; margin-bottom:22px; }}
+.panel {{ background:white; border:1px solid #d7e2f2; border-radius:14px; padding:18px; margin-bottom:18px; }}
+table {{ width:100%; border-collapse:collapse; table-layout:fixed; }}
+th,td {{ border-bottom:1px solid #e3eaf3; padding:11px; text-align:left; vertical-align:top; }}
+thead th {{ background:#eaf1ff; color:#163c78; }}
+tbody th {{ width:190px; color:#334c69; background:#f8fbff; }}
+</style></head><body>
+<h1>Vergelijking toetsmatrijzen</h1>
+<div class="meta">{escape(subject)} · {escape(str(test['name']).split(' — ')[0])} · {escape(str(test['school_year']))}</div>
+<div class="panel"><h2>Kerncijfers</h2><table><thead><tr><th>Onderdeel</th>{headers}</tr></thead>
+<tbody>{''.join(summary_rows)}</tbody></table></div>
+<div class="panel"><h2>Verdelingen</h2><table><thead><tr><th>Onderdeel</th>{headers}</tr></thead>
+<tbody>{''.join(distribution_rows)}</tbody></table></div>
+</body></html>"""
+
+
 def _duration(data: dict[str, Any]) -> str:
     if not data["timed_count"]:
         return "Niet ingevuld"
