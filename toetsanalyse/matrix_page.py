@@ -574,6 +574,16 @@ class MatrixPage(Page):
         part_names_by_question = self.analysis_part_names_by_question(test_id) if show_analysis_parts else {}
         from .test_versions import question_references, apply_alternative_map
         alternative_references = question_references(self.database,test_id) if test_id else {}
+        version_labels: dict[int, list[str]] = defaultdict(list)
+        if test_id:
+            for mapping in self.database.rows(
+                "SELECT vq.question_id, vq.label, v.name FROM version_questions vq "
+                "JOIN test_versions v ON v.id=vq.version_id WHERE v.test_id=? ORDER BY v.id",
+                (test_id,),
+            ):
+                version_labels[int(mapping["question_id"])].append(
+                    f"Vraag {mapping['label']} – {mapping['name']}"
+                )
         for row_number, row in enumerate(rows):
             total_points += float(row["maximum_score"])
             if row["expected_time_minutes"] is not None:
@@ -590,6 +600,8 @@ class MatrixPage(Page):
                 seen_groups.add(group_key)
             else:
                 label_text = f"Vraag {row['question_number']}"
+            if int(row["id"]) in version_labels:
+                label_text = "\n".join(version_labels[int(row["id"])])
             if row["shared_title"]:
                 label_text = row["shared_title"] + "\n" + label_text
             answer_key = "-"
@@ -970,6 +982,10 @@ class MatrixPage(Page):
         old_ids = {row["id"] for row in self.database.rows("SELECT id FROM matrix_questions WHERE test_id=?", (test_id,))}
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
+        if version_fields is not None:
+            # matrix_questions keeps a test-wide internal number, while the
+            # numbers pupils see are stored per version in version_questions.
+            dialog.number.setText(self.next_question_number(test_id))
         try:
             if dialog.has_subquestion_batch():
                 entries = dialog.subquestion_entries() or []
