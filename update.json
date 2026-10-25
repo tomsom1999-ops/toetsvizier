@@ -1,27 +1,21 @@
 {
-  "latest_version": "1.1.0",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v1.1.0",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.1.0/ToetsVizier-1.1.0-windows-installer.exe",
-  "release_notes": "ToetsVizier 1.1.0 maakt de score-invoer in Simpel en Uitgebreid sneller, rustiger en duidelijker, met betere uitleg en foutafhandeling.",
+  "latest_version": "1.1.1",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v1.1.1",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.1.1/ToetsVizier-1.1.1-windows-installer.exe",
+  "release_notes": "ToetsVizier 1.1.1 maakt de uitleg in de simpele modus gerichter en overzichtelijker.",
   "versions": [
     {
-      "version": "1.1.0",
-      "type": "minor",
-      "title": "Verbeterde score-invoer",
+      "version": "1.1.1",
+      "type": "patch",
+      "title": "Gerichtere uitleg",
       "changes": [
-        "Het grote invoerscherm richt zich volledig op score-invoer en geeft de tabel maximale ruimte.",
-        "Het normale invoerscherm heeft compactere toetsinstellingen en een invoerbalk direct boven de tabel.",
-        "Voortgang, open scores en acties staan overzichtelijk onder de tabel zonder afgebroken tekst.",
-        "De schermuitleg lijkt op de echte interface en bevat een apart onderwerp over alle invoerkleuren.",
-        "Duidelijke Nederlandstalige foutmeldingen noemen de leerling, vraag en oorzaak.",
-        "Een rode foutmarkering verdwijnt onmiddellijk nadat de invoer geldig is gecorrigeerd.",
-        "Scores die alleen ongeldig waren door een ontbrekende maximumscore worden automatisch opnieuw verwerkt.",
-        "Delete en Backspace wissen scores; N en meerkeuzeletters springen direct door.",
-        "Automatisch doorspringen bij gehele punten wordt per vraag bepaald: maximaal 9 springt door, een hoger maximum wacht op Enter of Tab.",
-        "Dezelfde kleurbetekenissen en invoerregels gelden nu in Simpel en Uitgebreid."
+        "De kleurenlegenda verschijnt alleen op de uitlegpagina over invoerkleuren.",
+        "Meerkeuzevragen instellen heeft een eigen uitlegpagina met invoerregels en antwoordsleutel.",
+        "Vragen indelen heeft een eigen uitlegpagina voor standaard- en zelfgemaakte indelingen.",
+        "De instelvensters blijven compact; de uitgebreide toelichting staat centraal in de uitlegsectie."
       ]
     }
   ],
   "update_type": "installer",
-  "installer_sha256": "d03352a40ced3f066c02f973895b32a3804633d5ad235b568b83609bfe3ee45f"
+  "installer_sha256": "af79236a4ca5d1775eff6a6168837cbcddf1a430122dab11844ba889e460cf31"
 }
