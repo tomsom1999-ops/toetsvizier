@@ -1,27 +1,27 @@
 {
-  "latest_version": "1.0.0",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v1.0.0",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.0.0/ToetsVizier-1.0.0-windows-installer.exe",
-  "release_notes": "ToetsVizier 1.0.0 maakt de simpele analysemodus compleet met automatisch opslaan, snellere score-invoer, duidelijke kleuren en flexibel in te delen vraagmetadata.",
+  "latest_version": "1.1.0",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v1.1.0",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.1.0/ToetsVizier-1.1.0-windows-installer.exe",
+  "release_notes": "ToetsVizier 1.1.0 maakt de score-invoer in Simpel en Uitgebreid sneller, rustiger en duidelijker, met betere uitleg en foutafhandeling.",
   "versions": [
     {
-      "version": "1.0.0",
-      "type": "major",
-      "title": "Simpele modus compleet",
+      "version": "1.1.0",
+      "type": "minor",
+      "title": "Verbeterde score-invoer",
       "changes": [
-        "Een analyse krijgt direct een eigen .tviz-opslagbestand en wordt daarna automatisch tussentijds opgeslagen.",
-        "De bestandsnaam wordt de herkenbare titel van de analyse; bestaande aangepaste titels blijven behouden.",
-        "Vernieuwd invoerscherm met rustigere knoppen, een kleurenlegenda en zichtbare voortgang.",
-        "Scores invoeren per leerling of per vraag, met richting omhoog of omlaag en werken in vraagblokken.",
-        "Automatisch doorspringen bij gehele scores wanneer de maximumscore hoogstens 9 is.",
-        "Delete en Backspace wissen scores veilig; ongedaan maken werkt ook in de grote invoerweergave.",
-        "Meerkeuzevragen tonen de antwoordsleutel bij de vraag en letters kunnen direct worden ingevoerd.",
-        "RTTI, OBIT, Bloom en meerdere eigen vraagindelingen zijn afzonderlijk te kiezen en eigen indelingen kunnen worden verwijderd.",
-        "Uitgebreidere uitleg, kleurbetekenissen en invoervoorbeelden helpen nieuwe gebruikers op weg.",
-        "Controleren op nieuwe versies staat bij nieuwe installaties standaard aan."
+        "Het grote invoerscherm richt zich volledig op score-invoer en geeft de tabel maximale ruimte.",
+        "Het normale invoerscherm heeft compactere toetsinstellingen en een invoerbalk direct boven de tabel.",
+        "Voortgang, open scores en acties staan overzichtelijk onder de tabel zonder afgebroken tekst.",
+        "De schermuitleg lijkt op de echte interface en bevat een apart onderwerp over alle invoerkleuren.",
+        "Duidelijke Nederlandstalige foutmeldingen noemen de leerling, vraag en oorzaak.",
+        "Een rode foutmarkering verdwijnt onmiddellijk nadat de invoer geldig is gecorrigeerd.",
+        "Scores die alleen ongeldig waren door een ontbrekende maximumscore worden automatisch opnieuw verwerkt.",
+        "Delete en Backspace wissen scores; N en meerkeuzeletters springen direct door.",
+        "Automatisch doorspringen bij gehele punten wordt per vraag bepaald: maximaal 9 springt door, een hoger maximum wacht op Enter of Tab.",
+        "Dezelfde kleurbetekenissen en invoerregels gelden nu in Simpel en Uitgebreid."
       ]
     }
   ],
   "update_type": "installer",
-  "installer_sha256": "4fcc114890f76254e2049cd2523d0da6b2e88bcda602cef36c28fd6b96a8e6ad"
+  "installer_sha256": "d03352a40ced3f066c02f973895b32a3804633d5ad235b568b83609bfe3ee45f"
 }
