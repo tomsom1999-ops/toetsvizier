@@ -1,23 +1,24 @@
 {
-  "latest_version": "1.2.0",
-  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v1.2.0",
-  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.2.0/ToetsVizier-1.2.0-windows-installer.exe",
-  "release_notes": "ToetsVizier 1.2.0 introduceert een apart updatevenster en verbetert rapportage en analyse van toetsversies.",
+  "latest_version": "1.2.1",
+  "download_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v1.2.1",
+  "installer_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.2.1/ToetsVizier-update-1.2.1.exe",
+  "release_notes": "ToetsVizier 1.2.1 verbetert psychometrie van gemeenschappelijke vragen, groepsverdelingen, meerkeuzeopmaak en matrijsvergelijkingen bij herkansingen.",
   "versions": [
     {
-      "version": "1.2.0",
-      "type": "minor",
-      "title": "Apart updatevenster en toetsversies vergelijken",
+      "version": "1.2.1",
+      "type": "patch",
+      "title": "Gemeenschappelijke psychometrie en leesbare analyses",
       "changes": [
-        "Apart updatevenster met bestandscontrole, back-up, herstel bij fouten en wachten op afsluiten.",
-        "Matrijsrapporten per toetsversie en een vergelijking tussen versies.",
-        "Gelijke vraagnummers uit verschillende versies blijven gescheiden in de analyse.",
-        "Gedeelde vragen krijgen een gezamenlijke P-waarde; Rit, Rir en betrouwbaarheid blijven per versie.",
-        "Grafiekbestanden worden meegeleverd in het updatepakket."
+        "Psychometrie van het gemeenschappelijke deel bij voldoende hoofdvragen, complete afnames en spreiding.",
+        "Alpha en SEM gebruiken alleen gemeenschappelijke punten; de scope staat ook in exports.",
+        "Groepsverdelingen blijven zichtbaar wanneer de interactieve grafiekrendering geen beeld oplevert; de heatmap blijft ongewijzigd.",
+        "Meerkeuzeanalyse toont lange versienamen en antwoordletters zonder overlap.",
+        "Matrijsvergelijking van de oorspronkelijke toets en gekoppelde herkansingen, met aparte kolommen per versie."
       ]
     }
   ],
-  "package_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.2.0/ToetsVizier-update-1.2.0.zip",
+  "package_url": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v1.2.1/ToetsVizier-update-1.2.1.zip",
   "update_type": "package",
-  "package_sha256": "AFB72D63BBD2B8F54310925843892AF276D4DF27D136CA9824F4D915FE2C639E"
+  "installer_sha256": "E38A7C8ECC54FDF1929A5EF04ABD6AA5956C3D6CD243058DAD879166FDB4FB19",
+  "package_sha256": "E1CC55267191F4ACA9E17F5D4D8D57F2CEA036DB3D7DDB279419BB36F58D5120"
 }
