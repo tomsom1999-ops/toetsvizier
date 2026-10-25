@@ -71,13 +71,15 @@ TOPICS = [
      "Met Uitleg invoerscherm opent u deze uitleg ook vanuit die grote weergave. "
      "Keer terug met Terug naar hoofdscherm; uw gegevens en instellingen blijven behouden. "
      "De voortgangsteller laat zien hoeveel scores ingevuld en nog open zijn.</p>", "direction"),
-    ("Meerkeuze en vragen indelen", "<p>Deze extra's zijn <b>optioneel</b>. U hoeft ze niet te gebruiken om een analyse te maken.</p>"
-     "<p><b>Meerkeuze instellen:</b> vink een vraag aan en kies de juiste antwoordletter, bijvoorbeeld B. "
+    ("Meerkeuzevragen instellen", "<p>Meerkeuze is <b>optioneel</b>. Zonder deze instelling voert u ook bij een "
+     "meerkeuzevraag gewoon het behaalde puntenaantal in.</p>"
+     "<p>Klik op <b>Meerkeuze instellen</b>, vink een vraag aan en kies de juiste antwoordletter, bijvoorbeeld B. "
      "Daarna typt u per leerling diens gekozen letter. Toetsvizier kent automatisch nul of de maximumscore toe. "
      "Zonder vinkje voert u zelf punten in, ook als de vraag meerkeuze is. N blijft beschikbaar.</p>"
      "<p>Heeft u al punten ingevuld? Wis die eerst voordat u naar antwoordletters wisselt, "
-     "zodat punten niet per ongeluk als antwoorden worden geïnterpreteerd.</p>"
-     "<p><b>Vragen indelen:</b> vink eerst aan welke verdelingen u wilt meenemen, bijvoorbeeld RTTI, OBIT of Bloom. "
+     "zodat punten niet per ongeluk als antwoorden worden geïnterpreteerd. De antwoordsleutel verschijnt daarna in de vraagkop.</p>", "mc"),
+    ("Vragen indelen", "<p>Vragen indelen is <b>optioneel</b>. Klik op <b>Vragen indelen</b> en vink eerst aan welke "
+     "verdelingen u wilt meenemen, bijvoorbeeld RTTI, OBIT of Bloom. "
      "Alleen aangevinkte verdelingen verschijnen als kolom en gaan mee in analyse en Excel-export. "
      "Uitvinken bewaart eerder gekozen categorieën; opnieuw aanvinken toont ze weer. "
      "Een fout aangemaakte eigen indeling kunt u met <b>Eigen indeling verwijderen</b> verwijderen. "
@@ -258,7 +260,8 @@ class InputDemo(QWidget):
         if area == "colors": return [self.cell_rect(0, 1).united(self.cell_rect(2, 4)), self.widget_rect(self.legend)]
         if area == "paste": return [self.cell_rect(1, 1 if self.variant == 0 else 0)]
         if area == "direction": return [self.widget_rect(self.routes)]
-        if area == "extras": return [self.widget_rect(self.metadata), self.widget_rect(self.multiple_choice)]
+        if area == "mc": return [self.widget_rect(self.multiple_choice), self.cell_rect(0, 3).united(self.cell_rect(2, 3))]
+        if area == "extras": return [self.widget_rect(self.metadata)]
         return [self.widget_rect(self.files)]
 
     def arrows(self):
