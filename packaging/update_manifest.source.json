@@ -1,5 +1,5 @@
 {
-  "release_notes": "ToetsVizier 1.1.2 ondersteunt opnieuw beginnende vraagnummers per toetsversie.",
+  "release_notes": "ToetsVizier 1.1.3 maakt het beheren en ordenen van vragen per toetsversie duidelijker.",
   "download_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/tag/v{version}",
   "installer_url_template": "https://github.com/tomsom1999-ops/toetsvizier/releases/download/v{version}/ToetsVizier-{version}-windows-installer.exe",
   "update_type": "installer",
@@ -7,14 +7,14 @@
     {
       "version": "{version}",
       "type": "patch",
-      "title": "Vraagnummers per toetsversie",
+      "title": "Versievragen beheren en ordenen",
       "changes": [
-        "Elke toetsversie kan opnieuw bij vraag 1 beginnen.",
-        "Een dubbel vraagnummer wordt alleen binnen dezelfde versie geweigerd.",
-        "De vraagentabel toont het nummer samen met de versienaam, bijvoorbeeld Vraag 1 – TA.",
-        "Normering per versie en analyses per versie of gecombineerd blijven ongewijzigd werken."
+        "Het verborgen interne vraagnummer wordt niet meer als invoerveld getoond.",
+        "Per vraag is duidelijk aan te vinken in welke toetsversies deze meedoet.",
+        "Bij het bewerken kunnen versieleden en vraagnummers per versie worden aangepast.",
+        "Het vragenoverzicht sorteert natuurlijk op de zichtbare vraagnummers: 1, 2, 3 tot en met 10."
       ]
     }
   ],
-  "installer_sha256": "a29af2282ed3b7c2758233da2be798dc1c489adb7773b383d57792da06ef68ae"
+  "installer_sha256": "4ec4a31c435d549e584670d9da963215f034c1db52cfa2d98835be104e4d8fe5"
 }

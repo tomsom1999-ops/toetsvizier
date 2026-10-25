@@ -130,19 +130,45 @@ class AlternativeMappingDialog(QDialog):
 
 class NewQuestionVersionFields(QWidget):
     """Version membership is part of entering a new question."""
-    def __init__(self, database, test_id, dialog):
+    def __init__(self, database, test_id, dialog, question_ids=None):
         super().__init__(dialog)
         from .test_versions import has_results
         self.database, self.test_id = database, test_id
         self.dialog = dialog
+        self.question_ids = {int(question_id) for question_id in (question_ids or [])}
         dialog.version_fields = self
         self.entries = {}
         self.version_rows = {}
         self.alternatives = {}
         self.reference_version_id = None
+        existing_membership = {}
+        existing_answers = {}
+        if self.question_ids:
+            placeholders = ",".join("?" for _ in self.question_ids)
+            for row in self.database.rows(
+                f"SELECT version_id, question_id, label, answer, alternatives_json FROM version_questions "
+                f"WHERE question_id IN ({placeholders})",
+                tuple(self.question_ids),
+            ):
+                question = self.database.rows(
+                    "SELECT subquestion FROM matrix_questions WHERE id=?", (row["question_id"],)
+                )[0]
+                suffix = str(question["subquestion"] or "")
+                label = str(row["label"])
+                existing_membership[int(row["version_id"])] = label[:-len(suffix)] if suffix and label.endswith(suffix) else label
+                existing_answers[int(row["version_id"])] = str(row["answer"] or "")
+                option_map = json.loads(row["alternatives_json"] or "{}")
+                if option_map:
+                    self.alternatives[int(row["version_id"])] = option_map
+            reference = self.database.scalar(
+                f"SELECT version_id FROM question_alternative_references WHERE question_id IN ({placeholders}) LIMIT 1",
+                tuple(self.question_ids),
+            )
+            self.reference_version_id = int(reference) if reference is not None else None
         layout = QVBoxLayout(self)
-        note = QLabel("Kies of deze vraag gedeeld wordt of bij één versie hoort. Vul daarna het vraagnummer "
-                      "in voor de gekozen versies. Bij een vraaggroep worden de subvraagletters toegevoegd.")
+        note = QLabel("Kies of deze vraag gedeeld wordt of bij één versie hoort. Vink bij 'Meedoen' alleen "
+                      "de versies aan waarin de vraag voorkomt en vul daarvoor het vraagnummer in. "
+                      "Bij een vraaggroep worden de subvraagletters toegevoegd.")
         note.setWordWrap(True)
         layout.addWidget(note)
         self.kind = QComboBox()
@@ -167,22 +193,26 @@ class NewQuestionVersionFields(QWidget):
         layout.addWidget(link_options)
         dialog.is_multiple_choice.toggled.connect(self.different.setEnabled)
         self.different.setEnabled(dialog.is_multiple_choice.isChecked())
+        membership_label = QLabel("Versies waarin deze vraag meedoet")
+        membership_label.setStyleSheet("font-weight: 600;")
+        layout.addWidget(membership_label)
         for form in versions(database, test_id):
             row_widget = QWidget()
             line = QHBoxLayout(row_widget)
             line.setContentsMargins(0,0,0,0)
-            check = QCheckBox(form["name"])
+            check = QCheckBox(f"Meedoen — {form['name']}")
             locked = has_results(database, test_id, form["id"])
-            check.setChecked(not locked)
+            check.setChecked(form["id"] in existing_membership if self.question_ids else not locked)
             check.setEnabled(not locked)
             if locked:
                 check.setToolTip("Deze versie heeft resultaten; toevoegen is geblokkeerd.")
-            number = QLineEdit(dialog.number.text())
+            number = QLineEdit(existing_membership.get(form["id"], dialog.number.text()))
             number.setPlaceholderText("Vraagnummer in deze versie")
-            number.setEnabled(check.isChecked())
-            check.toggled.connect(number.setEnabled)
+            number.setEnabled(check.isChecked() and check.isEnabled())
+            check.toggled.connect(lambda checked, number=number, check=check: number.setEnabled(checked and check.isEnabled()))
             answer = QComboBox()
             answer.addItems([""] + list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
+            answer.setCurrentText(existing_answers.get(form["id"], ""))
             answer.setEnabled(False)
             def update(_=None, check=check, answer=answer):
                 answer.setVisible(check.isChecked() and self.different.isChecked() and dialog.is_multiple_choice.isChecked())
@@ -201,6 +231,12 @@ class NewQuestionVersionFields(QWidget):
         self.question_hint.setWordWrap(True)
         layout.addWidget(self.question_hint)
         self._shared_selection = {vid for vid,(check,_,_) in self.entries.items() if check.isChecked()}
+        if self.question_ids:
+            title = self.database.scalar(
+                "SELECT shared_title FROM matrix_questions WHERE id=?", (next(iter(self.question_ids)),)
+            )
+            self.title.setText(str(title or ""))
+            self.different.setChecked(bool(self.alternatives))
         self.kind.currentIndexChanged.connect(self.change_kind)
         self.specific_version.currentIndexChanged.connect(self.update_mode)
         self.different.toggled.connect(self.update_mode)
@@ -209,6 +245,12 @@ class NewQuestionVersionFields(QWidget):
             self.kind.setCurrentIndex(self.kind.findData("specific"))
         self.update_mode()
         dialog.form.insertRow(0,"Toetsversies", self)
+        dialog.number.setVisible(False)
+        number_label = dialog.form.labelForField(dialog.number)
+        if number_label is not None:
+            number_label.setVisible(False)
+        if hasattr(dialog, "single_question_title"):
+            dialog.single_question_title.setText("Vraaggegevens")
 
     def change_kind(self):
         if self.kind.currentData() == "specific":
@@ -232,7 +274,7 @@ class NewQuestionVersionFields(QWidget):
                 check.setChecked(vid == self.specific_version.currentData() and check.isEnabled())
             check.setVisible(shared)
             self.version_rows[vid].setVisible(shared or vid == self.specific_version.currentData())
-            number.setEnabled(check.isChecked())
+            number.setEnabled(check.isChecked() and check.isEnabled())
             answer.setVisible(shared and mc and self.different.isChecked() and check.isChecked())
         self.update_question_hint()
 
@@ -277,15 +319,18 @@ class NewQuestionVersionFields(QWidget):
                 answer = next(letter for letter,canonical in option_map.items() if canonical == editor.base_answer)
                 self.entries[vid][2].setCurrentText(answer)
 
-    def save(self, question_ids):
+    def save(self, question_ids, *, commit=True):
+        question_ids = {int(question_id) for question_id in question_ids}
         old = {(r["version_id"], r["question_id"]): (r["label"], r["answer"]) for r in self.database.rows(
             "SELECT vq.* FROM version_questions vq JOIN test_versions v ON v.id=vq.version_id WHERE v.test_id=?", (self.test_id,))}
+        old = {key: value for key, value in old.items() if int(key[1]) not in question_ids}
         selected = [(vid, number.text().strip(), answer.currentText()) for vid, (check, number, answer) in self.entries.items() if check.isChecked()]
         alternatives = {(r["version_id"],r["question_id"]):json.loads(r["alternatives_json"]) for r in self.database.rows(
             "SELECT vq.* FROM version_questions vq JOIN test_versions v ON v.id=vq.version_id WHERE v.test_id=?",(self.test_id,))}
         titles = {row["id"]:row["shared_title"] for row in self.database.rows("SELECT id,shared_title FROM matrix_questions WHERE test_id=?",(self.test_id,))}
         references = {row["question_id"]:row["version_id"] for row in self.database.rows(
             "SELECT r.* FROM question_alternative_references r JOIN matrix_questions q ON q.id=r.question_id WHERE q.test_id=?",(self.test_id,))}
+        references = {qid: vid for qid, vid in references.items() if int(qid) not in question_ids}
         if not selected:
             raise ValueError("Vink minstens één versie aan voor de nieuwe vraag.")
         for qid in question_ids:
@@ -303,7 +348,7 @@ class NewQuestionVersionFields(QWidget):
                     raise ValueError("Koppel eerst de antwoordalternatieven van de geselecteerde versies.")
                 old[vid, qid] = (label + (question["subquestion"] or ""), answer if different else None)
                 alternatives[vid,qid] = self.alternatives.get(vid,{}) if different else {}
-        save_question_mapping(self.database, self.test_id, old, alternatives, references, titles)
+        save_question_mapping(self.database, self.test_id, old, alternatives, references, titles, commit=commit)
 
 
 class VersionDialog(QDialog):

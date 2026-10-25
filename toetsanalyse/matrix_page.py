@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections import defaultdict
 
@@ -562,6 +563,34 @@ class MatrixPage(Page):
             "ORDER BY CAST(question_number AS INTEGER), question_number, COALESCE(subquestion, '')",
             (test_id,),
         ) if test_id else []
+        version_labels: dict[int, list[str]] = defaultdict(list)
+        version_sort_labels: dict[int, list[str]] = defaultdict(list)
+        if test_id:
+            for mapping in self.database.rows(
+                "SELECT vq.question_id, vq.label, v.name FROM version_questions vq "
+                "JOIN test_versions v ON v.id=vq.version_id WHERE v.test_id=? ORDER BY v.id",
+                (test_id,),
+            ):
+                question_id = int(mapping["question_id"])
+                version_labels[question_id].append(f"Vraag {mapping['label']} – {mapping['name']}")
+                version_sort_labels[question_id].append(str(mapping["label"]))
+
+        def natural_question_key(label: str) -> tuple[int, int, str]:
+            match = re.match(r"^\s*(\d+)(.*)$", str(label))
+            if match:
+                return (0, int(match.group(1)), match.group(2).strip().casefold())
+            return (1, 0, str(label).strip().casefold())
+
+        rows = sorted(
+            rows,
+            key=lambda row: (
+                min(
+                    (natural_question_key(label) for label in version_sort_labels.get(int(row["id"]), [])),
+                    default=natural_question_key(str(row["label"])),
+                ),
+                int(row["id"]),
+            ),
+        )
         group_counts: dict[str, int] = {}
         for row in rows:
             if row["subquestion"]:
@@ -574,16 +603,6 @@ class MatrixPage(Page):
         part_names_by_question = self.analysis_part_names_by_question(test_id) if show_analysis_parts else {}
         from .test_versions import question_references, apply_alternative_map
         alternative_references = question_references(self.database,test_id) if test_id else {}
-        version_labels: dict[int, list[str]] = defaultdict(list)
-        if test_id:
-            for mapping in self.database.rows(
-                "SELECT vq.question_id, vq.label, v.name FROM version_questions vq "
-                "JOIN test_versions v ON v.id=vq.version_id WHERE v.test_id=? ORDER BY v.id",
-                (test_id,),
-            ):
-                version_labels[int(mapping["question_id"])].append(
-                    f"Vraag {mapping['label']} – {mapping['name']}"
-                )
         for row_number, row in enumerate(rows):
             total_points += float(row["maximum_score"])
             if row["expected_time_minutes"] is not None:
@@ -1097,6 +1116,13 @@ class MatrixPage(Page):
             )
         }
         dialog = QuestionDialog(properties, taxonomies, questions[0], values, taxonomy_values, self)
+        from .test_versions import versions
+        from .version_dialog import NewQuestionVersionFields
+        version_fields = (
+            NewQuestionVersionFields(self.database, self.test.currentData(), dialog, {question_id})
+            if versions(self.database, self.test.currentData())
+            else None
+        )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         if dialog.has_subquestion_batch():
@@ -1142,6 +1168,8 @@ class MatrixPage(Page):
                 )
                 return
             self.update_question_entry(question_id, entry)
+            if version_fields is not None:
+                version_fields.save({question_id}, commit=False)
             self.database.connection.commit()
             if new_is_multiple_choice and (not old_is_multiple_choice or old_answer != new_answer):
                 regraded_count = regrade_multiple_choice_question(self.database, self.test.currentData(), question_id)
