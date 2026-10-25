@@ -52,7 +52,8 @@ from .question_dialogs import (
     QuestionDialog,
 )
 from .report_documents import formatted_report_document
-from .reports import build_matrix_report_html, build_version_matrix_comparison_html
+from .reports import (build_matrix_report_html, build_version_matrix_comparison_html,
+                      build_resit_matrix_comparison_html, linked_matrix_tests)
 from .results import normalize_multiple_choice_response, regrade_multiple_choice_question, score_limit_conflicts
 from .ui_helpers import (
     compact_action_button,
@@ -1725,6 +1726,24 @@ class MatrixPage(Page):
         report_database = self.database
         report_name = self.test.currentText()
         projected_database = None
+        if linked_matrix_tests(self.database, test_id):
+            comparison_choice = 'Oorspronkelijke toets en herkansingen vergelijken'
+            selected_report, accepted = QInputDialog.getItem(
+                self, 'Matrijsrapport', 'Welk rapport wilt u maken?',
+                ['Matrijsrapport van deze toets', comparison_choice], 0, False,
+            )
+            if not accepted:
+                return
+            if selected_report == comparison_choice:
+                try:
+                    html = build_resit_matrix_comparison_html(self.database, test_id)
+                except Exception as error:
+                    QMessageBox.warning(self, 'Rapport niet gemaakt', str(error))
+                    return
+                MatrixReportPreviewDialog(
+                    self.database, test_id, f'{report_name} — herkansingsvergelijking', html, self,
+                ).exec()
+                return
         from .test_versions import project_version, versions
         test_versions = versions(self.database, test_id)
         if test_versions:

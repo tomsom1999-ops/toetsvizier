@@ -3,7 +3,8 @@ import unittest
 from pathlib import Path
 
 from toetsanalyse.database import SubjectDatabase
-from toetsanalyse.reports import build_matrix_report_html
+from toetsanalyse.reports import (build_matrix_report_html, build_resit_matrix_comparison_html,
+                                 linked_matrix_tests)
 
 
 class MatrixReportTests(unittest.TestCase):
@@ -20,6 +21,47 @@ class MatrixReportTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.database.close()
         self.temporary_directory.cleanup()
+
+    def test_linked_resit_comparison_is_identical_from_both_tests(self):
+        original = self.add_test('SE <1>')
+        resit = self.add_test('Herkansing & extra', original)
+        self.add_question(original, '1', 2, 'R', 'Open')
+        self.add_question(resit, '1', 5, 'T1', 'Open')
+        html = build_resit_matrix_comparison_html(self.database, original)
+        self.assertEqual(html, build_resit_matrix_comparison_html(self.database, resit))
+        self.assertIn('Oorspronkelijke toets: SE &lt;1&gt;', html)
+        self.assertIn('Herkansing: Herkansing &amp; extra', html)
+        self.assertIn('<td>2</td><td>5</td>', html)
+        self.assertIn('niet dat toetsen even moeilijk zijn', html)
+
+    def test_resit_comparison_keeps_versions_separate_and_excludes_unrelated_tests(self):
+        from toetsanalyse.test_versions import create_versions, save_question_mapping, versions
+        original = self.add_test('Origineel')
+        resit = self.add_test('Herkansing', original)
+        other = self.add_test('Andere toets')
+        self.add_question(original, '1', 2, 'R', 'Open')
+        self.add_question(original, '2', 3, 'T1', 'Open')
+        self.add_question(resit, '1', 4, 'R', 'Open')
+        create_versions(self.database, original, ['A', 'B'])
+        forms = versions(self.database, original)
+        questions = self.database.rows('SELECT id FROM matrix_questions WHERE test_id=? ORDER BY id', (original,))
+        save_question_mapping(self.database, original, {
+            (forms[0]['id'], questions[0]['id']): ('1', None),
+            (forms[1]['id'], questions[1]['id']): ('1', None),
+        })
+        html = build_resit_matrix_comparison_html(self.database, resit)
+        self.assertIn('Oorspronkelijke toets: Origineel — A', html)
+        self.assertIn('Oorspronkelijke toets: Origineel — B', html)
+        self.assertIn('<td>2</td><td>3</td><td>4</td>', html)
+        self.assertNotIn('Andere toets', html)
+        with self.assertRaises(ValueError):
+            build_resit_matrix_comparison_html(self.database, other)
+
+    def test_all_linked_resits_are_included_in_order(self):
+        original = self.add_test('Origineel')
+        first = self.add_test('Herkansing 1', original)
+        second = self.add_test('Herkansing 2', original)
+        self.assertEqual([original, first, second], [row['id'] for row in linked_matrix_tests(self.database, second)])
 
     def add_test(self, name: str, original_id: int | None = None) -> int:
         self.database.execute(

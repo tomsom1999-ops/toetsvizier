@@ -211,6 +211,47 @@ def build_version_matrix_comparison_html(database: SubjectDatabase, test_id: int
         finally:
             projected.close()
 
+    return _build_matrix_comparison_html(reports)
+
+
+def linked_matrix_tests(database: SubjectDatabase, test_id: int) -> list[dict[str, Any]]:
+    """Return the original and its resits, independent of the selected side."""
+    selected = database.rows('SELECT id, original_test_id FROM tests WHERE id=?', (test_id,))
+    if not selected:
+        raise ValueError('De geselecteerde toets bestaat niet meer.')
+    original_id = selected[0]['original_test_id'] or test_id
+    rows = database.rows(
+        'SELECT id, name FROM tests WHERE id=? OR original_test_id=? '
+        'ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END, COALESCE(test_date, created_at), id',
+        (original_id, original_id, original_id),
+    )
+    return [dict(row) for row in rows] if len(rows) > 1 else []
+
+
+def build_resit_matrix_comparison_html(database: SubjectDatabase, test_id: int) -> str:
+    """Compare linked tests, keeping every version in its own column."""
+    from .test_versions import project_version, versions
+
+    linked = linked_matrix_tests(database, test_id)
+    if not linked:
+        raise ValueError('Koppel eerst een herkansing aan de oorspronkelijke toets.')
+    reports = []
+    for index, test in enumerate(linked):
+        name = ('Oorspronkelijke toets' if index == 0 else 'Herkansing') + ': ' + str(test['name'])
+        forms = versions(database, test['id'])
+        if not forms:
+            reports.append((name, matrix_report_data(database, test['id'])))
+            continue
+        for form in forms:
+            projected = project_version(database, test['id'], int(form['id']))
+            try:
+                reports.append((name + ' — ' + str(form['name']), matrix_report_data(projected, test['id'])))
+            finally:
+                projected.close()
+    return _build_matrix_comparison_html(reports, resit=True)
+
+
+def _build_matrix_comparison_html(reports: list[tuple[str, dict[str, Any]]], *, resit: bool = False) -> str:
     test = reports[0][1]["test"]
     subject = reports[0][1]["subject"]
     headers = "".join(f"<th>{escape(name)}</th>" for name, _data in reports)
@@ -265,8 +306,10 @@ th,td {{ border-bottom:1px solid #e3eaf3; padding:11px; text-align:left; vertica
 thead th {{ background:#eaf1ff; color:#163c78; }}
 tbody th {{ width:190px; color:#334c69; background:#f8fbff; }}
 </style></head><body>
-<h1>Vergelijking toetsmatrijzen</h1>
+<h1>Vergelijking toetsmatrijzen{' — oorspronkelijke toets en herkansingen' if resit else ''}</h1>
 <div class="meta">{escape(subject)} · {escape(str(test['name']).split(' — ')[0])} · {escape(str(test['school_year']))}</div>
+<p>Vergelijk de opbouw, puntenverdeling en dekking. Gelijke vraagnummers betekenen niet dat vragen inhoudelijk gelijk zijn.
+Een vergelijkbare matrijs bewijst niet dat toetsen even moeilijk zijn. Elke toetsversie staat apart.</p>
 <div class="panel"><h2>Kerncijfers</h2><table><thead><tr><th>Onderdeel</th>{headers}</tr></thead>
 <tbody>{''.join(summary_rows)}</tbody></table></div>
 <div class="panel"><h2>Verdelingen</h2><table><thead><tr><th>Onderdeel</th>{headers}</tr></thead>

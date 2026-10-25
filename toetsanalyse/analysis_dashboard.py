@@ -143,10 +143,21 @@ td.num {{ font-variant-numeric:tabular-nums; }}
 .mc-question-title {{ font-weight:700; }}
 .mc-description {{ color:var(--muted); font-size:11px; margin-top:2px; }}
 .mc-metrics {{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }}
-.mc-options {{ display:grid; grid-template-columns:minmax(180px,.8fr) minmax(220px,1fr); gap:8px; align-items:start; }}
-.mc-option-list {{ display:flex; flex-direction:column; gap:6px; }}
-.mc-option-row {{ display:grid; grid-template-columns:34px 1fr 58px; gap:8px; align-items:center; font-size:11px; }}
+.mc-options {{ display:flex; flex-direction:column; gap:10px; align-items:stretch; }}
+.mc-option-list {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }}
+.mc-option {{ border:1px solid #edf0f6; border-radius:8px; padding:10px; min-width:0; }}
+.mc-option-row {{ display:grid; grid-template-columns:70px minmax(40px,1fr) 75px; gap:10px; align-items:center; font-size:12px; }}
 .mc-option-letter {{ font-weight:700; color:var(--navy); }}
+.mc-option-row .num {{ white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums; }}
+.mc-version-links {{ display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; padding-top:8px; border-top:1px solid #edf0f6; }}
+.mc-version-link {{ display:flex; align-items:center; gap:8px; padding:5px 8px; background:#f4f6fb; border-radius:6px; font-size:11px; min-width:0; max-width:100%; line-height:1.4; }}
+.mc-version-name {{ overflow-wrap:anywhere; color:var(--muted); }}
+.mc-version-letter {{ flex:none; color:var(--navy); font-weight:700; }}
+.mc-question-title {{ overflow-wrap:anywhere; line-height:1.5; }}
+@media (max-width:700px) {{
+ .mc-option-list {{ grid-template-columns:minmax(0,1fr); }}
+ .mc-question-head {{ flex-direction:column; }}
+}}
 .mc-option-bar {{ height:8px; border-radius:999px; background:#edf1f7; overflow:hidden; }}
 .mc-option-fill {{ height:100%; border-radius:999px; background:var(--muted); }}
 .mc-option-fill.correct {{ background:var(--green); }}
@@ -644,6 +655,15 @@ function renderGeneral() {{
   }} else {{
     comparisonCard.style.display = "none";
   }}
+  if (data.common_part) {{
+    const common = data.common_part;
+    comparisonCard.insertAdjacentHTML("beforeend", `<h3>Psychometrie van het gemeenschappelijke deel</h3>
+      <div class="explanation">${{esc(common.note)}}</div>
+      <p>${{common.unit_count}} hoofdvragen · ${{common.question_count}} (sub)vragen · ${{number(common.maximum_score)}} punten · ${{common.participant_count}} complete afnames.
+      Alpha en SEM hieronder hebben uitsluitend betrekking op deze ${{number(common.maximum_score)}} punten; SEM-% gebruikt dit maximum.</p>
+      <div class="table-wrap"><table><thead><tr><th>Versie</th><th>Complete afnames gemeenschappelijk deel</th><th>Gemiddeld % gemeenschappelijk deel</th></tr></thead>
+      <tbody>${{common.versions.map(version => `<tr><td>${{esc(version.name)}}</td><td>${{version.participant_count}}</td><td>${{percentage(version.mean_percentage)}}</td></tr>`).join("")}}</tbody></table></div>`);
+  }}
   renderSubtestInsight();
   const names = [
     {{key:"alpha", label:"Cronbach's alpha"}},
@@ -667,6 +687,9 @@ function renderGeneral() {{
   const alpha = data.quality.alpha;
   const sem = data.quality.sem;
   document.getElementById("reliabilityText").innerHTML = alpha.value === null ? "Er zijn nog niet genoeg complete resultaten om betrouwbaarheid en SEM te berekenen." : `Cronbach's alpha is <strong>${{qualityValue(alpha.value)}}</strong> (${{esc(alpha.status.label)}}). SEM is <strong>${{sem.value === null ? "-" : qualityValue(sem.value) + "% (" + qualityValue(sem.score_value) + " pt)"}}</strong> (${{esc(sem.status.label)}}). ${{esc(alpha.status.advice)}} ${{esc(sem.status.advice)}}`;
+  if (data.common_part) {{
+    document.getElementById("reliabilityText").insertAdjacentHTML("afterbegin", `<p>${{esc(data.common_part.note)}}</p>`);
+  }}
   const line = item => `<div class="question-line"><span>Vraag ${{esc(item.label)}}</span><strong>${{qualityValue(item.p_value)}}</strong></div>`;
   document.getElementById("easyItems").innerHTML = data.easy_items.map(line).join("");
   document.getElementById("difficultItems").innerHTML = data.difficult_items.map(line).join("");
@@ -720,11 +743,11 @@ function renderMultipleChoiceAnalysis() {{
       : "";
     const options = (item.responses || []).map(response => {{
       const fillWidth = Math.max(0, Math.min(100, Number(response.percentage || 0)));
-      return `<div class="mc-option-row" title="${{esc(response.accepted ? "Goedgekeurd antwoord" : "Afleider of fout antwoord")}}">
-        <div class="mc-option-letter">${{esc(response.option)}}${{response.accepted ? " (goed)" : ""}}${{response.version_options ? `<div class="mini-note">${{response.version_options.map(link => esc(link.version + ": " + link.option)).join(" / ")}}</div>` : ""}}</div>
+      return `<div class="mc-option" title="${{esc(response.accepted ? "Goedgekeurd antwoord" : "Afleider of fout antwoord")}}"><div class="mc-option-row">
+        <div class="mc-option-letter">${{esc(response.option)}}${{response.accepted ? " (goed)" : ""}}</div>
         <div class="mc-option-bar"><div class="mc-option-fill ${{response.accepted ? "correct" : ""}}" style="width:${{fillWidth}}%"></div></div>
         <div class="num">${{response.count}} (${{percentage(response.percentage)}})</div>
-      </div>`;
+      </div>${{response.version_options && response.version_options.length ? `<div class="mc-version-links" aria-label="Antwoordletter per versie">${{response.version_options.map(link => `<span class="mc-version-link"><span class="mc-version-name">${{esc(link.version)}}</span><span class="mc-version-letter">${{esc(link.option)}}</span></span>`).join("")}}</div>` : ""}}</div>`;
     }}).join("");
     return `<section class="mc-question">
       <div class="mc-question-head">
@@ -773,29 +796,9 @@ function fallbackDimensionChart(id, dimension) {{
   }}).join("")}}</div>`;
 }}
 function dimensionChart(id, dimension, horizontal=false) {{
-  const entries = dimension.entries || [];
-  const target = document.getElementById(id);
-  if (!target) return;
-  if (!window.Plotly) {{
-    logDashboardError(dimension.title || id, "Plotly niet geladen");
-    fallbackDimensionChart(id, dimension);
-    return;
-  }}
-  if (!entries.length) {{ target.innerHTML = '<div class="empty">Geen ingevulde classificaties voor deze toets.</div>'; return; }}
-  const names = entries.map(entry => wrapCategoryLabel(entry.name));
-  const values = entries.map(entry => entry.percentage);
-  const palette = values.map(value => barColor(value));
-  const trace = horizontal ? {{x:values, y:names, type:"bar", orientation:"h", marker:{{color:palette}}, text:values.map(value=>Math.round(value)+"%"), textposition:"outside"}} : {{x:names, y:values, type:"bar", marker:{{color:palette}}, text:values.map(value=>Math.round(value)+"%"), textposition:"outside"}};
-  const layout = baseLayout();
-  if (horizontal) {{
-    const longestLabel = names.reduce((length, label) => Math.max(length, String(label).replaceAll("<br>", " ").length), 0);
-    const leftMargin = Math.min(230, Math.max(130, 8 * longestLabel));
-    layout.margin = {{l:leftMargin,r:35,t:8,b:34}};
-    layout.xaxis = {{range:[0,100], ticksuffix:"%", fixedrange:true, gridcolor:colors.grid}};
-    layout.yaxis = {{fixedrange:true, autorange:"reversed"}};
-  }}
-  else {{ layout.yaxis = {{range:[0,108], ticksuffix:"%", fixedrange:true, gridcolor:colors.grid, zeroline:false}}; }}
-  safePlotlyReact(id, [trace], layout, plotConfig, dimension.title || id, () => fallbackDimensionChart(id, dimension));
+  // These simple bars do not need a graphics engine. Render them directly so
+  // switching tabs or a failed Plotly render cannot leave an empty chart.
+  fallbackDimensionChart(id, dimension);
 }}
 function gradeBands(grades) {{
   const bands = [

@@ -296,6 +296,22 @@ class VersionQuestionNumbers(unittest.TestCase):
             self.assertIn(form["name"], previews[0].html)
         self.assertIn("Maximumscore", previews[0].html)
 
+    def test_matrix_report_can_compare_linked_resit_from_original(self):
+        self.db.connection.execute(
+            "INSERT INTO tests(school_year_id,name,period,test_type,is_resit,original_test_id) VALUES(1,'SE1 herkansing','1','SE',1,?)",
+            (self.test_id,),
+        )
+        self.db.connection.commit()
+        previews = []
+        with (
+            patch.object(QInputDialog, 'getItem', return_value=('Oorspronkelijke toets en herkansingen vergelijken', True)),
+            patch.object(MatrixReportPreviewDialog, 'exec', lambda dialog: previews.append(dialog)),
+        ):
+            self.page.generate_report()
+        self.assertEqual(1, len(previews))
+        self.assertIn('herkansingsvergelijking', previews[0].test_name)
+        self.assertIn('Herkansing: SE1 herkansing', previews[0].html)
+
 
 if __name__ == "__main__":
     unittest.main()

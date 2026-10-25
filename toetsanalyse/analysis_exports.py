@@ -180,10 +180,16 @@ def _summary_section(data: dict[str, Any]) -> str:
         ("Jaarlaag", test.get("grade_year")),
     ]
     info_html = "".join(f"<span><b>{_esc(label)}</b>{_esc(value or '-')}</span>" for label, value in info_rows)
+    common = data.get('common_part')
+    common_html = ''
+    if common:
+        common_html = (f'<h3>Gemeenschappelijk deel</h3><p>{_esc(common["note"])}</p>'
+                       f'<p>{common["unit_count"]} hoofdvragen, {_num(common["maximum_score"])} punten, '
+                       f'{common["participant_count"]} complete afnames. SEM-% gebruikt dit maximum.</p>')
     return _section(
         "Samenvatting",
         f'<div class="info-strip">{info_html}</div><div class="kpi-grid">{card_html}</div>'
-        f'<h3>Toetskwaliteit in één oogopslag</h3><div class="quality-grid">{quality_html}</div>',
+        f'{common_html}<h3>Toetskwaliteit in één oogopslag</h3><div class="quality-grid">{quality_html}</div>',
         "Kleurstatussen zijn signalen voor bespreking; ze vervangen geen inhoudelijke beoordeling van de vraag.",
     )
 
@@ -484,6 +490,12 @@ def export_analysis_xlsx(data: dict[str, Any], output_path: str | Path, options:
         ]
         for label, value in rows:
             sheet.append([label, _fmt(value)])
+        common = data.get('common_part')
+        if common:
+            sheet.append(['Psychometrische scope', common['note']])
+            sheet.append(['Gemeenschappelijke hoofdvragen', common['unit_count']])
+            sheet.append(['Gemeenschappelijk maximum (basis SEM-%)', common['maximum_score']])
+            sheet.append(['Complete afnames gemeenschappelijk deel', common['participant_count']])
 
     if options.get("item_analysis", False):
         append_section("Itemanalyse")

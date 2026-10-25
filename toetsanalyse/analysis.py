@@ -13,6 +13,80 @@ from .results import QUESTION_ORDER_SQL, is_not_made_score, normalize_multiple_c
 
 MIN_RELIABLE_ANALYSIS_PARTICIPANTS = 5
 
+# Operational display limits, not a statistical guarantee or a power calculation.
+COMMON_PART_MIN_UNITS = 5
+COMMON_PART_MIN_PARTICIPANTS = 20
+
+
+def _common_part_psychometrics(database, test_id, forms, question_ids, originals):
+    question_ids = {qid for qid in question_ids if float(originals[qid]['maximum_score']) > 0}
+    ids = sorted(question_ids)
+    units = defaultdict(list)
+    for qid in ids:
+        units[str(originals[qid]['question_number'])].append(qid)
+    maximum = sum(float(originals[qid]['maximum_score']) for qid in ids)
+    scores_by_student = defaultdict(dict)
+    student_forms = {}
+    for row in database.rows(
+        "SELECT a.student_id, sv.version_id, s.question_id, s.score FROM test_attempts a "
+        "JOIN student_test_versions sv ON sv.student_id=a.student_id AND sv.test_id=a.test_id "
+        "JOIN scores s ON s.attempt_id=a.id WHERE a.test_id=? AND a.status='gemaakt' AND s.score IS NOT NULL",
+        (test_id,),
+    ):
+        qid = int(row['question_id'])
+        if qid in question_ids and math.isfinite(float(row['score'])):
+            scores_by_student[int(row['student_id'])][qid] = float(row['score'])
+            student_forms[int(row['student_id'])] = int(row['version_id'])
+    form_ids = {int(form['id']) for form in forms}
+    cohort = [(sid, scores) for sid, scores in scores_by_student.items()
+              if set(scores) == set(ids) and student_forms[sid] in form_ids]
+    totals = [sum(scores.values()) for _, scores in cohort]
+    version_summary = []
+    for form in forms:
+        values = [sum(scores.values()) for sid, scores in cohort if student_forms[sid] == int(form['id'])]
+        version_summary.append({'name': str(form['name']), 'participant_count': len(values),
+                                'mean_percentage': _average(values) / maximum * 100 if values and maximum else None})
+    reasons = []
+    if len(units) < COMMON_PART_MIN_UNITS:
+        reasons.append(f'Minimaal {COMMON_PART_MIN_UNITS} gemeenschappelijke hoofdvragen nodig; nu {len(units)}.')
+    if len(cohort) < COMMON_PART_MIN_PARTICIPANTS:
+        reasons.append(f'Minimaal {COMMON_PART_MIN_PARTICIPANTS} complete afnames van het gemeenschappelijke deel nodig; nu {len(cohort)}.')
+    if any(row['participant_count'] < MIN_RELIABLE_ANALYSIS_PARTICIPANTS for row in version_summary):
+        reasons.append(f'Minimaal {MIN_RELIABLE_ANALYSIS_PARTICIPANTS} complete afnames per versie nodig.')
+    if not maximum:
+        reasons.append('Het gemeenschappelijke deel heeft geen scorepunten.')
+    if len(totals) < 2 or math.isclose(statistics.variance(totals), 0.0):
+        reasons.append('Er is onvoldoende spreiding in de gemeenschappelijke totaalscores.')
+    available = not reasons
+    matrix = [[sum(scores[qid] for qid in group) for group in units.values()] for _, scores in cohort]
+    alpha = _cronbach(matrix) if available else None
+    sem_score = statistics.stdev(totals) * math.sqrt(1 - alpha) if alpha is not None and 0 <= alpha <= 1 else None
+    item_stats = {}
+    for qid in ids:
+        values = [scores[qid] for _, scores in cohort]
+        # Exclude the whole parent question from the rest score: subquestions
+        # must not make their own discrimination look artificially strong.
+        group = units[str(originals[qid]['question_number'])]
+        rest = [sum(value for key, value in scores.items() if key not in group) for _, scores in cohort]
+        item_stats[qid] = {
+            'participant_count': len(cohort),
+            'p_value': _average(values) / float(originals[qid]['maximum_score']) if values and originals[qid]['maximum_score'] else None,
+            'rit': _pearson(values, totals) if available else None,
+            'rir': _pearson(values, rest) if available else None,
+        }
+    note = ('Psychometrische maten gelden uitsluitend voor het gemeenschappelijke deel van alle versies. '
+            'Subvragen tellen samen als één hoofdvraag voor alpha; Rir sluit de hele eigen hoofdvraag uit. '
+            'De ondergrenzen zijn praktische weergavecriteria, geen bewijs van betrouwbaarheid. '
+            'De samenstelling van de versiegroepen kan de gezamenlijke uitkomsten beïnvloeden.')
+    if reasons:
+        note += ' Nog niet berekend: ' + ' '.join(reasons)
+    elif alpha is not None and alpha < 0:
+        note += ' Alpha is negatief: controleer samenhang en scoring. SEM wordt daarom niet getoond.'
+    return {'available': available, 'question_ids': ids, 'question_count': len(ids), 'unit_count': len(units),
+            'maximum_score': maximum, 'participant_count': len(cohort), 'versions': version_summary,
+            'alpha': alpha, 'sem_score': sem_score, 'sem_percentage': sem_score / maximum * 100 if sem_score is not None else None,
+            'item_stats': item_stats, 'reasons': reasons, 'note': note}
+
 
 def combined_version_analysis(database, test_id, analysis_part_id=None):
     """Aggregate observed items; compare totals as percentages of each form."""
@@ -43,13 +117,13 @@ def combined_version_analysis(database, test_id, analysis_part_id=None):
         "Totaalscores worden als percentage van de eigen versie weergegeven. "
         "Vraagstatistieken worden alleen gecombineerd voor expliciet gedeelde vragen. "
         "Versiespecifieke vragen, ook met hetzelfde nummer, vergelijkt u uitsluitend binnen hun eigen versie. "
-        "Betrouwbaarheid en meetfout bekijkt u per versie."
+        "Psychometrische maten zijn, bij voldoende gegevens, gebaseerd op het gemeenschappelijke deel."
     )
     result["analysis_mode"] = "version_comparison"
     result["item_analysis_note"] = (
         "Hier staan alleen expliciet gedeelde vragen. Gelijke vraagnummers betekenen niet automatisch "
         "dat vragen inhoudelijk gelijk zijn. De gezamenlijke P-waarde gebruikt alle afnames van de gedeelde "
-        "vraag; Rit en Rir worden niet over verschillende toetsversies samengevoegd. Kies bovenaan één "
+        "vraag; Rit en Rir worden uitsluitend berekend binnen het gemeenschappelijke deel van alle versies. Kies bovenaan één "
         "versie voor de volledige itemanalyse."
     )
     result["version_comparison"] = [
@@ -87,6 +161,11 @@ def combined_version_analysis(database, test_id, analysis_part_id=None):
         )
     }
     shared_question_ids = {question_id for question_id, count in membership_counts.items() if count > 1}
+    common_ids = {qid for qid, count in membership_counts.items() if count == len(forms)}
+    # Respect a selected analysis part as well as membership in every version.
+    selected_ids = {int(item['id']) for _, data in datasets for item in data['item_analysis']}
+    common = _common_part_psychometrics(database, test_id, forms, common_ids & selected_ids, originals)
+    result['common_part'] = common
     templates = {
         item["id"]: item
         for _, data in datasets
@@ -110,6 +189,9 @@ def combined_version_analysis(database, test_id, analysis_part_id=None):
         # differs per form, so a pooled correlation would not have one clear meaning.
         rit = None
         rir = None
+        if question_id in common['item_stats']:
+            stats = common['item_stats'][question_id]
+            p_value, rit, rir = stats['p_value'], stats['rit'], stats['rir']
         labels = [f"{form['name']}: {row['label']}" for form in forms for row in database.rows(
             "SELECT label FROM version_questions WHERE version_id=? AND question_id=?", (form["id"], question_id))]
         item.update({"label": question["question_number"] + (question["subquestion"] or ""), "version_labels":labels,
@@ -122,6 +204,9 @@ def combined_version_analysis(database, test_id, analysis_part_id=None):
             item["label"] = question["shared_title"]
             item["display_label"] = question["shared_title"] + " — " + " / ".join(labels)
         items.append(item)
+        if question_id in common['item_stats']:
+            item['participant_count'] = common['participant_count']
+            item['psychometric_scope'] = 'gemeenschappelijk deel van alle versies'
     result["item_analysis"] = items
     result["question_group_analysis"] = items
     result["question_count"] = len(items)
@@ -129,8 +214,11 @@ def combined_version_analysis(database, test_id, analysis_part_id=None):
     result["difficult_items"] = sorted([item for item in items if item["p_value"] is not None], key=lambda i: i["p_value"])[:5]
     for kind in ("alpha", "sem"):
         result["quality"][kind] = {"value": None, "score_value": None, "status": _metric_status(kind, None)}
+    result['quality']['alpha'] = {'value': common['alpha'], 'status': _metric_status('alpha', common['alpha'])}
+    result['quality']['sem'] = {'value': common['sem_percentage'], 'score_value': common['sem_score'],
+                                'status': _metric_status('sem', common['sem_percentage'])}
     for kind, field in (("p_value", "p_value"), ("rit", "rit"), ("rir", "rir")):
-        value = _average([item[field] for item in items if item[field] is not None])
+        value = _average([item[field] for item in common['item_stats'].values() if item[field] is not None])
         result["quality"][kind] = {"value": value, "status": _metric_status("p" if kind == "p_value" else kind, value)}
     # Dimension percentages pool attainable points only for forms containing each category.
     def merge_dimension(dimensions):
